@@ -24,12 +24,10 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Setup Godot Android environment
+      - name: Setup Godot
         shell: bash
         run: |
           set -e
-
-          echo "HOME=$HOME"
 
           mkdir -p "$HOME/.config/godot"
           mkdir -p "$HOME/.local/share/godot/export_templates"
@@ -47,17 +45,35 @@ jobs:
           echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' \
             >> "$HOME/.config/godot/editor_settings-4.3.tres"
 
-          echo "Godot:"
           godot --version
-
-          echo "Java:"
           java -version
 
-          echo "Templates:"
-          ls -lah "$HOME/.local/share/godot/export_templates/4.3.stable/"
+      - name: Install Android SDK 34
+        shell: bash
+        run: |
+          set -e
 
-          echo "Keystore:"
-          ls -lah /root/debug.keystore
+          SDKMANAGER="$(find /usr/lib/android-sdk -type f -name sdkmanager | head -n 1)"
+
+          echo "sdkmanager: $SDKMANAGER"
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" \
+            --sdk_root=/usr/lib/android-sdk \
+            --licenses || true
+
+          "$SDKMANAGER" \
+            --sdk_root=/usr/lib/android-sdk \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+
+          ls -lah /usr/lib/android-sdk/build-tools/
+          ls -lah /usr/lib/android-sdk/platforms/
 
       - name: Build APK
         shell: bash

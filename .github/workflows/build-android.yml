@@ -16,6 +16,8 @@ jobs:
       image: barichello/godot-ci:4.3
 
     env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ANDROID_HOME: /usr/lib/android-sdk
       GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
       GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
       GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
@@ -34,16 +36,33 @@ jobs:
           mkdir -p build
 
           cp -a /root/.config/godot/. "$HOME/.config/godot/"
-
           cp -a \
             /root/.local/share/godot/export_templates/4.3.stable \
             "$HOME/.local/share/godot/export_templates/"
 
-          echo 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' \
-            >> "$HOME/.config/godot/editor_settings-4.3.tres"
+          SETTINGS="$HOME/.config/godot/editor_settings-4.3.tres"
 
-          echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' \
-            >> "$HOME/.config/godot/editor_settings-4.3.tres"
+          if grep -q '^export/android/java_sdk_path' "$SETTINGS"; then
+            sed -i 's#^export/android/java_sdk_path.*#export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"#' "$SETTINGS"
+          else
+            echo 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' >> "$SETTINGS"
+          fi
+
+          if grep -q '^export/android/android_sdk_path' "$SETTINGS"; then
+            sed -i 's#^export/android/android_sdk_path.*#export/android/android_sdk_path = "/usr/lib/android-sdk"#' "$SETTINGS"
+          else
+            echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' >> "$SETTINGS"
+          fi
+
+          echo "=== Godot config files ==="
+          ls -lah "$HOME/.config/godot/"
+          echo "=== Android export settings ==="
+          grep -n 'export/android' "$SETTINGS" || true
+          echo "=== Environment ==="
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -x "$JAVA_HOME/bin/java"
+          test -d "$ANDROID_HOME"
 
           godot --version
           java -version
@@ -72,6 +91,10 @@ jobs:
             "platforms;android-34" \
             "build-tools;34.0.0"
 
+          test -x /usr/lib/android-sdk/platform-tools/adb
+          test -d /usr/lib/android-sdk/platforms/android-34
+          test -d /usr/lib/android-sdk/build-tools/34.0.0
+
           ls -lah /usr/lib/android-sdk/build-tools/
           ls -lah /usr/lib/android-sdk/platforms/
 
@@ -90,6 +113,12 @@ jobs:
               -keysize 2048 \
               -validity 10000
           fi
+
+          keytool -list \
+            -keystore /root/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey >/dev/null
+
           ls -lh /root/debug.keystore
 
       - name: Build APK

@@ -11,6 +11,7 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-latest
+
     container:
       image: barichello/godot-ci:4.3
 
@@ -23,33 +24,50 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Configure Godot Android
+      - name: Setup Godot Android environment
         shell: bash
         run: |
           set -e
+
+          echo "HOME=$HOME"
+
+          mkdir -p "$HOME/.config/godot"
+          mkdir -p "$HOME/.local/share/godot/export_templates"
           mkdir -p build
-          mkdir -p /root/.config/godot
 
-          cat > /root/.config/godot/editor_settings-4.3.tres <<'EOF'
-          [gd_resource type="EditorSettings" format=3]
+          cp -a /root/.config/godot/. "$HOME/.config/godot/"
 
-          [resource]
-          export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"
-          export/android/android_sdk_path = "/usr/lib/android-sdk"
-          export/android/debug_keystore = "/root/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOF
+          cp -a \
+            /root/.local/share/godot/export_templates/4.3.stable \
+            "$HOME/.local/share/godot/export_templates/"
 
-          ls -l /root/debug.keystore
-          java -version
+          echo 'export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"' \
+            >> "$HOME/.config/godot/editor_settings-4.3.tres"
+
+          echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' \
+            >> "$HOME/.config/godot/editor_settings-4.3.tres"
+
+          echo "Godot:"
           godot --version
+
+          echo "Java:"
+          java -version
+
+          echo "Templates:"
+          ls -lah "$HOME/.local/share/godot/export_templates/4.3.stable/"
+
+          echo "Keystore:"
+          ls -lah /root/debug.keystore
 
       - name: Build APK
         shell: bash
         run: |
           set -e
-          godot --headless --verbose --path . \
+
+          godot \
+            --headless \
+            --verbose \
+            --path . \
             --export-debug "Android" \
             "build/Geostrategy-v0.1-debug.apk"
 

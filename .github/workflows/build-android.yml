@@ -14,33 +14,47 @@ jobs:
     container:
       image: barichello/godot-ci:4.3
 
+    env:
+      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: /root/debug.keystore
+      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Prepare Android debug keystore
+      - name: Configure Godot Android
         shell: bash
         run: |
           set -e
-          mkdir -p "$HOME/.android" build
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          mkdir -p build
+          mkdir -p /root/.config/godot
+
+          cat > /root/.config/godot/editor_settings-4.3.tres <<'EOF'
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"
+          export/android/android_sdk_path = "/usr/lib/android-sdk"
+          export/android/debug_keystore = "/root/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+
+          ls -l /root/debug.keystore
+          java -version
+          godot --version
 
       - name: Build APK
         shell: bash
         run: |
           set -e
-          godot --headless --verbose --path . --export-debug "Android" "build/Geostrategy-v0.1-debug.apk"
+          godot --headless --verbose --path . \
+            --export-debug "Android" \
+            "build/Geostrategy-v0.1-debug.apk"
+
           test -s "build/Geostrategy-v0.1-debug.apk"
+          ls -lh "build/Geostrategy-v0.1-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

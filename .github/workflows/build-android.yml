@@ -1,0 +1,51 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.3
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Prepare Android debug keystore
+        shell: bash
+        run: |
+          set -e
+          mkdir -p "$HOME/.android" build
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+          godot --headless --verbose --path . --export-debug "Android" "build/Geostrategy-v0.1-debug.apk"
+          test -s "build/Geostrategy-v0.1-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Geostrategy-Android-APK
+          path: build/Geostrategy-v0.1-debug.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -75,6 +75,23 @@ jobs:
           ls -lah /usr/lib/android-sdk/build-tools/
           ls -lah /usr/lib/android-sdk/platforms/
 
+      - name: Create debug keystore
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f /root/debug.keystore ]; then
+            keytool -genkeypair \
+              -keystore /root/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000
+          fi
+          ls -lh /root/debug.keystore
+
       - name: Build APK
         shell: bash
         run: |

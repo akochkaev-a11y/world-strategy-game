@@ -67,16 +67,30 @@ jobs:
           test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
           test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
 
-      - name: Install complete Android toolchain for Godot 4.3
+      - name: Ensure Android SDK packages for Godot 4.3
         shell: bash
         run: |
           set -e
           SDKMANAGER="$(find /usr/lib/android-sdk -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-            "platform-tools" "build-tools;34.0.0" "platforms;android-34" \
-            "cmdline-tools;latest" "cmake;3.10.2.4988404" "ndk;23.2.8568313"
+
+          # Godot's prebuilt Android export templates do not need an NDK/CMake
+          # download here. Installing only the SDK packages required for export
+          # avoids flaky large NDK downloads on GitHub runners.
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+              "platform-tools" "build-tools;34.0.0" "platforms;android-34"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Android SDK package installation failed after 3 attempts."
+              exit 1
+            fi
+            echo "SDK download failed, retrying in 5 seconds..."
+            sleep 5
+          done
+
           test -x "$ANDROID_HOME/platform-tools/adb"
           test -d "$ANDROID_HOME/build-tools/34.0.0"
           test -d "$ANDROID_HOME/platforms/android-34"

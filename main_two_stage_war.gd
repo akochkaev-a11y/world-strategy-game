@@ -37,18 +37,16 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
         var dl: float=float(d[key])*defense_fraction*d_loss
         alosses[key]=al; dlosses[key]=dl
         a[key]=maxf(0.0,float(a[key])-al); d[key]=maxf(0.0,float(d[key])-dl)
-        apeop += al*float(PERSONNEL_PER_POWER_M[key])*1000000.0
-        dpeop += dl*float(PERSONNEL_PER_POWER_M[key])*1000000.0
+        # One lost non-missile unit is one lost service member. Missiles have no crew.
+        if key != "missile":
+            apeop += al
+            dpeop += dl
         acost += al*float(UNIT_COST[key])/100.0; dcost += dl*float(UNIT_COST[key])/100.0
     a.population=maxf(0.1,float(a.population)-apeop/1000000.0); d.population=maxf(0.1,float(d.population)-dpeop/1000000.0)
     a.war_fatigue=minf(100.0,float(a.war_fatigue)+5.0); d.war_fatigue=minf(100.0,float(d.war_fatigue)+5.0)
 
     # Equipment was already paid for when purchased. Battle losses remove units,
     # but do NOT charge treasury for the destroyed equipment a second time.
-
-    # Reparation rule:
-    # loser pays 50% of the value of the LOSER'S OWN equipment losses to the winner,
-    # capped by the loser's current treasury.
     var loser: String = defender_id if winner==attacker_id else attacker_id
     var loser_loss_cost: float = dcost if loser==defender_id else acost
     var loser_country: Dictionary = countries[loser]
@@ -63,8 +61,6 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
         countries[winner].treasury += treasury_reparation
         transfer += treasury_reparation
 
-    # Financial result now reflects only actual treasury movement in the battle.
-    # Equipment-loss value remains informational in the report and is not deducted again.
     var a_financial := 0.0
     var d_financial := 0.0
     if winner==attacker_id:
@@ -103,15 +99,11 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
                 equipment_labels.append(child as Label)
     if equipment_labels.size() < 2:
         return
-
     var left_label: Label = equipment_labels[0]
     var right_label: Label = equipment_labels[0]
     for label in equipment_labels:
-        if label.global_position.x < left_label.global_position.x:
-            left_label = label
-        if label.global_position.x > right_label.global_position.x:
-            right_label = label
-
+        if label.global_position.x < left_label.global_position.x: left_label = label
+        if label.global_position.x > right_label.global_position.x: right_label = label
     var report_labels := [left_label, right_label]
     var countries_order := [attacker_id, defender_id]
     var financials := [a_financial, d_financial]
@@ -121,10 +113,8 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
         var treasury_label := Label.new()
         treasury_label.add_theme_font_size_override("font_size", 15)
         treasury_label.text = "Казна: %.0f млн  (%+.0f млн)" % [float(countries[country_id].treasury), delta]
-        if delta < 0.0:
-            treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
-        elif delta > 0.0:
-            treasury_label.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45, 1.0))
+        if delta < 0.0: treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
+        elif delta > 0.0: treasury_label.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45, 1.0))
         report_labels[i].get_parent().add_child(treasury_label)
 
 func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: String, before_a: Dictionary, before_d: Dictionary, alosses: Dictionary, dlosses: Dictionary, apeop: float, dpeop: float, acost: float, dcost: float, transfer: float, a_financial: float, d_financial: float) -> void:

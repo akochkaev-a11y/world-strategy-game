@@ -10,6 +10,7 @@ const WAR_SCORE_THRESHOLD := 60.0
 const WAR_MIN_RESERVE_CYCLES := 2.5
 const WAR_BASE_COOLDOWN_TICKS := 24
 const WAR_EXTRA_COOLDOWN_TICKS := 12
+const WAR_LOSER_EXTRA_COOLDOWN_TICKS := 12
 
 func _ensure_population_data() -> void:
     super._ensure_population_data()
@@ -63,7 +64,7 @@ func _bot_tick() -> void:
             _mark_activity(id, ACTIVITY_ECONOMY)
         elif roll < 0.78:
             _bot_diplomacy(id)
-        elif roll > 0.96:
+        elif roll > 0.97:
             _bot_may_attack(id)
     _refresh_all()
 
@@ -81,6 +82,13 @@ func _war_personality_score(ai_type: String) -> float:
             return -10.0
         _:
             return 0.0
+
+func _allied_power(country_id: String) -> float:
+    var total: float = 0.0
+    for ally_id in countries[country_id].get("allies", []):
+        if countries.has(ally_id):
+            total += _total_power(countries[ally_id])
+    return total
 
 func _war_target_score(attacker_id: String, defender_id: String) -> float:
     var a: Dictionary = countries[attacker_id]
@@ -107,8 +115,7 @@ func _war_target_score(attacker_id: String, defender_id: String) -> float:
     elif strength_ratio < 0.90:
         score -= 25.0
 
-    var fatigue: float = float(a.war_fatigue)
-    score -= fatigue * 0.40
+    score -= float(a.war_fatigue) * 0.40
 
     var attacker_income: float = maxf(1.0, _effective_income(a))
     var reserve_cycles: float = float(a.treasury) / attacker_income
@@ -117,11 +124,16 @@ func _war_target_score(attacker_id: String, defender_id: String) -> float:
     elif reserve_cycles < 4.0:
         score -= 15.0
 
-    var defender_allies: int = 0
-    for ally_id in d.get("allies", []):
-        if ally_id != attacker_id:
-            defender_allies += 1
-    score -= float(defender_allies) * 10.0
+    if float(a.economy) < 80.0:
+        score -= 15.0
+    elif float(a.economy) > 120.0:
+        score += 5.0
+
+    var defender_allies_power: float = _allied_power(defender_id)
+    if defender_allies_power > _total_power(d) * 0.50:
+        score -= 10.0
+    if defender_allies_power > _total_power(a):
+        score -= 25.0
 
     if float(d.treasury) > float(a.treasury) * 1.5:
         score += 5.0
@@ -234,12 +246,25 @@ func _refresh_news() -> void:
 func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: float, silent_bot: bool = false) -> void:
     if _are_allies(attacker_id, defender_id):
         return
+
+    var attacker_power_before: float = _total_power(countries[attacker_id])
+    var defender_power_before: float = _total_power(countries[defender_id])
     _mark_activity(attacker_id, ACTIVITY_WAR, 6)
     _mark_activity(defender_id, ACTIVITY_WAR, 6)
     super._resolve_battle(attacker_id, defender_id, attack_fraction, silent_bot)
 
-    var attacker_rest := WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
-    var defender_rest := WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
+    var attacker_loss_share: float = 1.0 - _total_power(countries[attacker_id]) / maxf(1.0, attacker_power_before)
+    var defender_loss_share: float = 1.0 - _total_power(countries[defender_id]) / maxf(1.0, defender_power_before)
+    var attacker_rest: int = WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
+    var defender_rest: int = WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
+
+    if attacker_loss_share > defender_loss_share + 0.03:
+        attacker_rest += WAR_LOSER_EXTRA_COOLDOWN_TICKS
+        countries[attacker_id].war_fatigue = minf(100.0, float(countries[attacker_id].war_fatigue) + 8.0)
+    elif defender_loss_share > attacker_loss_share + 0.03:
+        defender_rest += WAR_LOSER_EXTRA_COOLDOWN_TICKS
+        countries[defender_id].war_fatigue = minf(100.0, float(countries[defender_id].war_fatigue) + 8.0)
+
     attacker_rest += int(float(countries[attacker_id].war_fatigue) * 0.20)
     defender_rest += int(float(countries[defender_id].war_fatigue) * 0.20)
     countries[attacker_id]["war_cooldown"] = maxi(int(countries[attacker_id].get("war_cooldown", 0)), attacker_rest)

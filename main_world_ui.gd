@@ -49,16 +49,17 @@ func _bot_tick() -> void:
         if id == player_id:
             continue
         var c: Dictionary = countries[id]
+        var spendable: float = _bot_spendable_treasury(c)
         var roll := randf()
-        if roll < 0.42 and c.treasury > 150:
+        if roll < 0.42 and spendable > 150.0:
             var key: String = UNIT_KEYS.pick_random()
             var price: float = _unit_price(id, key)
-            if c.treasury >= price and _can_recruit(c, key, 100.0):
+            if spendable >= price and _can_recruit(c, key, 100.0):
                 c.treasury -= price
                 c[key] += 100.0
                 _mark_activity(id, ACTIVITY_MILITARY)
-        elif roll < 0.62 and c.treasury >= 250:
-            c.treasury -= 250
+        elif roll < 0.62 and spendable >= 250.0:
+            c.treasury -= 250.0
             c.economy += 1.0
             c.income *= 1.01
             _mark_activity(id, ACTIVITY_ECONOMY)

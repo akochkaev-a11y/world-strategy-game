@@ -1,4 +1,4 @@
-extends "res://main_gameplay_model.gd"
+extends "res://main_game_tuning.gd"
 
 var world_map: Control
 var map_action_bar: HBoxContainer

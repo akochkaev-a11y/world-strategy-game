@@ -6,6 +6,7 @@ const MAX_ANNUAL_POP_GROWTH := 0.025
 const POPULATION_INCOME_EXPONENT := 0.65
 const DAYS_PER_YEAR := 365.0
 const MILITARY_UPKEEP_PER_PERSON := 0.000008
+const BOT_SAVINGS_SHARE := 0.20
 
 # Baseline demographic trend used by the 10 playable countries.
 # Economy and war fatigue modify these values dynamically during the game.
@@ -30,6 +31,8 @@ func _ensure_population_data() -> void:
             c["initial_population"] = maxf(0.1, float(c.get("population", 100.0)))
         if not c.has("war_cooldown"):
             c["war_cooldown"] = 0
+        if not c.has("protected_treasury"):
+            c["protected_treasury"] = 0.0
 
 func _annual_population_growth(id: String) -> float:
     var c: Dictionary = countries[id]
@@ -73,7 +76,7 @@ func _effective_income(c: Dictionary) -> float:
     var population_factor: float = pow(population / initial_population, POPULATION_INCOME_EXPONENT)
     return maxf(0.0, float(c.income) * population_factor * _military_labor_factor(c))
 
-# Called once per game day. At x1, one real second equals one game day.
+# One real second at x1 equals one game day.
 func _demography_day_tick() -> void:
     for id in countries.keys():
         var c: Dictionary = countries[id]
@@ -89,13 +92,19 @@ func _daily_population_change_people(id: String) -> float:
     var daily_multiplier: float = pow(1.0 + annual_growth, 1.0 / DAYS_PER_YEAR)
     return float(c.population) * 1000000.0 * (daily_multiplier - 1.0)
 
+func _bot_spendable_treasury(c: Dictionary) -> float:
+    return maxf(0.0, float(c.treasury) - float(c.get("protected_treasury", 0.0)))
+
 func _economic_tick() -> void:
     for id in countries.keys():
         var c: Dictionary = countries[id]
         var personnel_units: float = _military_population(c) * 1000000.0
         var upkeep: float = personnel_units * MILITARY_UPKEEP_PER_PERSON
         upkeep += float(c.get("missile", 0.0)) * 0.00008
-        c.treasury += maxf(0.0, _effective_income(c) - upkeep)
+        var net_income: float = maxf(0.0, _effective_income(c) - upkeep)
+        c.treasury += net_income
+        if id != player_id:
+            c.protected_treasury = minf(float(c.treasury), float(c.get("protected_treasury", 0.0)) + net_income * BOT_SAVINGS_SHARE)
         c.war_fatigue = maxf(0.0, float(c.war_fatigue) - 0.02)
     _refresh_top()
 

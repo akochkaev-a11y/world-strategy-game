@@ -2,6 +2,7 @@ extends "res://main_two_stage_war.gd"
 
 const ECONOMIC_TICK_SECONDS := 30.0
 const BATTLE_TIME_SCALE := 0.65
+var day_accum: float = 0.0
 
 func _ready() -> void:
     super._ready()
@@ -10,6 +11,14 @@ func _ready() -> void:
 func _process(delta: float) -> void:
     if paused:
         return
+
+    # Game calendar: at x1 one real second equals one game day.
+    day_accum += delta * speed
+    while day_accum >= 1.0:
+        day_accum -= 1.0
+        _demography_day_tick()
+
+    # Economy timing stays unchanged: x1 = one economic tick every 30 seconds.
     minute_accum += delta * speed
     bot_accum += delta * speed
     while minute_accum >= ECONOMIC_TICK_SECONDS:
@@ -29,7 +38,7 @@ func _remove_test_time_note(node: Node) -> void:
 func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: String, before_a: Dictionary, before_d: Dictionary, alosses: Dictionary, dlosses: Dictionary, apeop: float, dpeop: float, acost: float, dcost: float, transfer: float, a_financial: float, d_financial: float) -> void:
     var old_scale := Engine.time_scale
     Engine.time_scale = BATTLE_TIME_SCALE
-    super._show_fullscreen_battle(attacker_id, defender_id, winner, before_a, before_d, alosses, dlosses, apeop, dpeop, acost, dcost, transfer, a_financial, d_financial)
+    super._show_fullscreen_battle(attacker_id, defender_id, winner, before_a, before_d, alosses, dlosses, apeop, dpeop,acost,dcost,transfer,a_financial,d_financial)
     await get_tree().process_frame
     _compact_battle_overlay()
 

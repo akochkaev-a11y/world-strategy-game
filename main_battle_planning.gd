@@ -50,7 +50,7 @@ func _forecast_text(ratio: float) -> String:
 
 func _open_attack_dialog(target: String) -> void:
     if _are_allies(player_id, target):
-        _show_simple_notice("%s - союзник России. Сначала расторгните союз." % str(countries[target].name))
+        _show_simple_notice("СОЮЗНИК", "%s - союзник России. Сначала расторгните союз." % str(countries[target].name))
         return
 
     var dialog := AcceptDialog.new()

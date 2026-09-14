@@ -1,10 +1,15 @@
-extends "res://main_diplomacy.gd"
+extends "res://main_economy_ai.gd"
 
 const ACTIVITY_IDLE := "idle"
 const ACTIVITY_ECONOMY := "economy"
 const ACTIVITY_MILITARY := "military"
 const ACTIVITY_WAR := "war"
 const ACTIVITY_ALLIANCE := "alliance"
+
+const WAR_SCORE_THRESHOLD := 60.0
+const WAR_MIN_RESERVE_CYCLES := 2.5
+const WAR_BASE_COOLDOWN_TICKS := 24
+const WAR_EXTRA_COOLDOWN_TICKS := 12
 
 func _ensure_population_data() -> void:
     super._ensure_population_data()
@@ -13,6 +18,8 @@ func _ensure_population_data() -> void:
             countries[id]["activity"] = ACTIVITY_IDLE
         if not countries[id].has("activity_ticks"):
             countries[id]["activity_ticks"] = 0
+        if not countries[id].has("war_cooldown"):
+            countries[id]["war_cooldown"] = 0
 
 func _mark_activity(id: String, activity: String, ticks: int = 4) -> void:
     if countries.has(id):
@@ -28,66 +35,131 @@ func _tick_activity() -> void:
             if left <= 0:
                 countries[id]["activity"] = ACTIVITY_IDLE
 
+func _tick_war_cooldowns() -> void:
+    for id in countries.keys():
+        var left := int(countries[id].get("war_cooldown", 0))
+        if left > 0:
+            countries[id]["war_cooldown"] = left - 1
+
 func _bot_tick() -> void:
     _tick_activity()
+    _tick_war_cooldowns()
     for id in countries.keys():
         if id == player_id:
             continue
         var c: Dictionary = countries[id]
         var roll := randf()
-        if roll < 0.48 and c.treasury > 150:
+        if roll < 0.42 and c.treasury > 150:
             var key: String = UNIT_KEYS.pick_random()
             var price: float = _unit_price(id, key)
             if c.treasury >= price and _can_recruit(c, key, 100.0):
                 c.treasury -= price
                 c[key] += 100.0
                 _mark_activity(id, ACTIVITY_MILITARY)
-        elif roll < 0.70 and c.treasury >= 250:
+        elif roll < 0.62 and c.treasury >= 250:
             c.treasury -= 250
             c.economy += 1.0
             c.income *= 1.01
             _mark_activity(id, ACTIVITY_ECONOMY)
         elif roll < 0.78:
             _bot_diplomacy(id)
-        elif roll > 0.90:
+        elif roll > 0.96:
             _bot_may_attack(id)
     _refresh_all()
 
+func _war_personality_score(ai_type: String) -> float:
+    match ai_type:
+        "агрессивный":
+            return 20.0
+        "авантюрный":
+            return 10.0
+        "осторожный":
+            return -20.0
+        "дипломатический":
+            return -15.0
+        "экономический":
+            return -10.0
+        _:
+            return 0.0
+
+func _war_target_score(attacker_id: String, defender_id: String) -> float:
+    var a: Dictionary = countries[attacker_id]
+    var d: Dictionary = countries[defender_id]
+    var score: float = 20.0 + _war_personality_score(str(a.ai))
+
+    var relations: int = int(a.relations.get(defender_id, 0))
+    if relations <= -60:
+        score += 25.0
+    elif relations <= -30:
+        score += 15.0
+    elif relations >= 40:
+        score -= 35.0
+    elif relations >= 0:
+        score -= 12.0
+
+    var strength_ratio: float = _total_power(a) / maxf(1.0, _total_power(d))
+    if strength_ratio >= 1.50:
+        score += 25.0
+    elif strength_ratio >= 1.20:
+        score += 15.0
+    elif strength_ratio < 0.70:
+        score -= 40.0
+    elif strength_ratio < 0.90:
+        score -= 25.0
+
+    var fatigue: float = float(a.war_fatigue)
+    score -= fatigue * 0.40
+
+    var attacker_income: float = maxf(1.0, _effective_income(a))
+    var reserve_cycles: float = float(a.treasury) / attacker_income
+    if reserve_cycles >= 8.0:
+        score += 10.0
+    elif reserve_cycles < 4.0:
+        score -= 15.0
+
+    var defender_allies: int = 0
+    for ally_id in d.get("allies", []):
+        if ally_id != attacker_id:
+            defender_allies += 1
+    score -= float(defender_allies) * 10.0
+
+    if float(d.treasury) > float(a.treasury) * 1.5:
+        score += 5.0
+
+    return score + randf_range(0.0, 8.0)
+
 func _bot_may_attack(attacker_id: String) -> void:
+    if int(countries[attacker_id].get("war_cooldown", 0)) > 0:
+        return
+
+    var a: Dictionary = countries[attacker_id]
+    var minimum_reserve: float = maxf(100.0, _effective_income(a) * WAR_MIN_RESERVE_CYCLES)
+    if float(a.treasury) < minimum_reserve:
+        return
+    if float(a.war_fatigue) >= 70.0:
+        return
+
     var candidates: Array = countries.keys().filter(func(x):
         return x != attacker_id and not _are_allies(attacker_id, x)
     )
     if candidates.is_empty():
         return
 
-    var defender_id: String
-    if player_id != attacker_id and player_id in candidates and randf() < 0.35:
-        defender_id = player_id
-    else:
-        defender_id = candidates.pick_random()
+    var best_target := ""
+    var best_score := -999.0
+    for candidate in candidates:
+        var target_id := str(candidate)
+        var score := _war_target_score(attacker_id, target_id)
+        if score > best_score:
+            best_score = score
+            best_target = target_id
 
-    # Absolute rule: allies never attack each other.
-    if _are_allies(attacker_id, defender_id):
+    if best_target == "" or best_score < WAR_SCORE_THRESHOLD:
         return
 
-    var a: Dictionary = countries[attacker_id]
-    var d: Dictionary = countries[defender_id]
-    var strength_ratio: float = _total_power(a) / maxf(1.0, _total_power(d))
-    var relations: int = int(a.relations.get(defender_id, 0))
-    var threshold: float = 1.15
-    if a.ai == "агрессивный":
-        threshold = 0.82
-    elif a.ai == "осторожный":
-        threshold = 1.35
-    if relations <= -50:
-        threshold -= 0.20
-    elif relations <= -20:
-        threshold -= 0.10
-
-    if strength_ratio > threshold:
-        _mark_activity(attacker_id, ACTIVITY_WAR, 6)
-        _mark_activity(defender_id, ACTIVITY_WAR, 6)
-        _resolve_battle(attacker_id, defender_id, randf_range(0.18, 0.35), true)
+    _mark_activity(attacker_id, ACTIVITY_WAR, 6)
+    _mark_activity(best_target, ACTIVITY_WAR, 6)
+    _resolve_battle(attacker_id, best_target, randf_range(0.18, 0.32), true)
 
 func _bot_diplomacy(id: String) -> void:
     var candidates: Array = countries.keys().filter(func(x): return x != id and x != player_id)
@@ -160,12 +232,18 @@ func _refresh_news() -> void:
         _add_label(news_box, "Боевых столкновений пока не было.", 16)
 
 func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: float, silent_bot: bool = false) -> void:
-    # Safety net so no code path can make allies fight each other.
     if _are_allies(attacker_id, defender_id):
         return
     _mark_activity(attacker_id, ACTIVITY_WAR, 6)
     _mark_activity(defender_id, ACTIVITY_WAR, 6)
     super._resolve_battle(attacker_id, defender_id, attack_fraction, silent_bot)
+
+    var attacker_rest := WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
+    var defender_rest := WAR_BASE_COOLDOWN_TICKS + randi_range(0, WAR_EXTRA_COOLDOWN_TICKS)
+    attacker_rest += int(float(countries[attacker_id].war_fatigue) * 0.20)
+    defender_rest += int(float(countries[defender_id].war_fatigue) * 0.20)
+    countries[attacker_id]["war_cooldown"] = maxi(int(countries[attacker_id].get("war_cooldown", 0)), attacker_rest)
+    countries[defender_id]["war_cooldown"] = maxi(int(countries[defender_id].get("war_cooldown", 0)), defender_rest)
 
 func _toggle_alliance_with(target: String) -> void:
     var was_allied := _are_allies(player_id, target)

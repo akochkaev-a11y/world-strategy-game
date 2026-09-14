@@ -32,7 +32,7 @@ func _ensure_population_data() -> void:
         if not c.has("war_cooldown"):
             c["war_cooldown"] = 0
         if not c.has("protected_treasury"):
-            c["protected_treasury"] = 0.0
+            c["protected_treasury"] = float(c.treasury) * BOT_SAVINGS_SHARE if id != player_id else 0.0
 
 func _annual_population_growth(id: String) -> float:
     var c: Dictionary = countries[id]

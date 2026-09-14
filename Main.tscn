@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource path="res://main_battle_planning_mobile.gd" type="Script" id="1"]
+[ext_resource path="res://main_two_stage_war.gd" type="Script" id="1"]
 
 [node name="Main" type="Control"]
 layout_mode = 3

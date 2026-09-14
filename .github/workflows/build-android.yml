@@ -104,7 +104,11 @@ jobs:
           echo "export exit=$EXPORT_RC"
           echo '=== Relevant diagnostic lines ==='
           grep -Ei 'error|warn|android|sdk|jdk|java|keystore|template|export|invalid|missing' /tmp/editor.log /tmp/export.log || true
-          exit 0
+          if grep -Eq 'SCRIPT ERROR|Parse Error|Failed to load script' /tmp/editor.log /tmp/export.log; then
+            echo 'GDScript validation failed.'
+            exit 1
+          fi
+          exit "$EXPORT_RC"
 
       - name: Build APK
         shell: bash

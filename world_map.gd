@@ -93,3 +93,5 @@ func _gui_input(event: InputEvent) -> void:
                 country_clicked.emit(id)
                 accept_event()
                 return
+
+# Build trigger after removing the accidental EOF marker.

@@ -92,12 +92,16 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
     var countries_order := [attacker_id, defender_id]
     for i in range(2):
         var country_id: String = countries_order[i]
-        var payment: float = transfer if winner != "" and country_id != winner else 0.0
+        var is_winner := winner != "" and country_id == winner
+        var sign := "+" if is_winner and transfer > 0.0 else "-"
+        var amount := transfer if transfer > 0.0 else 0.0
         var treasury_label := Label.new()
         treasury_label.add_theme_font_size_override("font_size", 15)
-        treasury_label.text = "Казна: %.0f млн  (-%.0f млн)" % [float(countries[country_id].treasury), payment]
-        if payment > 0.0:
+        treasury_label.text = "Казна: %.0f млн  (%s%.0f млн)" % [float(countries[country_id].treasury), sign, amount]
+        if not is_winner and transfer > 0.0:
             treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
+        elif is_winner and transfer > 0.0:
+            treasury_label.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45, 1.0))
         equipment_labels[i].get_parent().add_child(treasury_label)
 
 func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: String, before_a: Dictionary, before_d: Dictionary, alosses: Dictionary, dlosses: Dictionary, apeop: float, dpeop: float, acost: float, dcost: float, transfer: float, a_financial: float, d_financial: float) -> void:

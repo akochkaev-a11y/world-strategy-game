@@ -56,12 +56,10 @@ func _draw() -> void:
     for y in range(0, 9):
         var py := size.y * float(y) / 8.0
         draw_line(Vector2(0,py),Vector2(size.x,py),Color(0.10,0.22,0.30,0.45),1.0)
-
     draw_colored_polygon(_land_mass(), Color(0.13,0.18,0.17,1.0))
     var shapes := _country_shapes()
     polygons.clear()
     colors = {"RU":Color(0.18,0.34,0.55,1),"DE":Color(0.27,0.38,0.48,1),"FR":Color(0.30,0.39,0.52,1),"GB":Color(0.29,0.35,0.50,1),"TR":Color(0.48,0.31,0.18,1),"CN":Color(0.52,0.25,0.20,1),"IN":Color(0.48,0.35,0.20,1),"JP":Color(0.47,0.23,0.26,1)}
-
     for id in shapes.keys():
         var poly := _poly(shapes[id])
         polygons[id] = poly
@@ -71,7 +69,6 @@ func _draw() -> void:
         draw_colored_polygon(poly, fill)
         for i in range(poly.size()):
             draw_line(poly[i], poly[(i+1)%poly.size()], Color(0.78,0.86,0.86,0.75), 2.0)
-
         var center := Vector2.ZERO
         for p in poly:
             center += p
@@ -80,7 +77,6 @@ func _draw() -> void:
         var power := int(_total_power(countries.get(id, {})))
         draw_string(ThemeDB.fallback_font, center - Vector2(0,7), name, HORIZONTAL_ALIGNMENT_CENTER, 105, 14, Color(0.95,0.98,0.98,1))
         draw_string(ThemeDB.fallback_font, center + Vector2(0,10), "%dk" % int(power / 1000), HORIZONTAL_ALIGNMENT_CENTER, 75, 11, Color(0.80,0.90,0.90,0.9))
-
     draw_string(ThemeDB.fallback_font, Vector2(18,28), "ЕВРОПА И ЕВРАЗИЯ", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(0.92,0.96,0.98,1))
     draw_string(ThemeDB.fallback_font, Vector2(18,size.y-18), "Нажимайте на страну: войска, дипломатия, помощь и другие действия", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.78,0.86,0.90,1))
 
@@ -97,4 +93,3 @@ func _gui_input(event: InputEvent) -> void:
                 country_clicked.emit(id)
                 accept_event()
                 return
-EOF

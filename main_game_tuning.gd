@@ -7,6 +7,25 @@ var day_accum: float = 0.0
 func _ready() -> void:
     super._ready()
     _remove_test_time_note(self)
+    _add_x100_test_speed()
+
+func _add_x100_test_speed() -> void:
+    if speed_buttons.has(100):
+        return
+    var stack: Array[Node] = [self]
+    while not stack.is_empty():
+        var node: Node = stack.pop_back()
+        for child in node.get_children():
+            stack.push_back(child)
+            if child is Button and str(child.text) == "x10":
+                var parent := child.get_parent()
+                var b := Button.new()
+                b.text = "x100"
+                b.pressed.connect(_set_speed.bind(100))
+                parent.add_child(b)
+                parent.move_child(b, child.get_index() + 1)
+                speed_buttons[100] = b
+                return
 
 func _process(delta: float) -> void:
     if paused:
@@ -18,7 +37,7 @@ func _process(delta: float) -> void:
         day_accum -= 1.0
         _demography_day_tick()
 
-    # Economy timing stays unchanged: x1 = one economic tick every 30 seconds.
+    # Existing timings are unchanged; x100 scales them through the same speed variable.
     minute_accum += delta * speed
     bot_accum += delta * speed
     while minute_accum >= ECONOMIC_TICK_SECONDS:

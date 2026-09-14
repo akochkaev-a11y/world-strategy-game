@@ -8,7 +8,7 @@ const INTEL_DEFENSE_ESTIMATE := 0.60
 
 func _combat_power(c: Dictionary, fraction: float, defender: bool) -> float:
     var total: float
-    # For Russia on attack, the five sliders now affect combat power separately.
+    # For Russia on attack, the five sliders affect combat power separately.
     if not defender and str(c.get("name", "")) == str(countries[player_id].get("name", "")):
         var prefs: Dictionary = countries[player_id].get("attack_prefs", {})
         var ground: float = float(c.army) * float(prefs.get("army", fraction * 100.0)) / 100.0
@@ -16,7 +16,8 @@ func _combat_power(c: Dictionary, fraction: float, defender: bool) -> float:
         var navy: float = float(c.navy) * float(prefs.get("navy", fraction * 100.0)) / 100.0
         var defense: float = float(c.def) * float(prefs.get("def", fraction * 100.0)) / 100.0
         var missile: float = float(c.missile) * float(prefs.get("missile", fraction * 100.0)) / 100.0
-        var air_support: float = air * (1.0 - minf(0.55, defense / maxf(1.0, air + 5000.0)))
+        # Own air defense supports the operation; it must never suppress our own aviation.
+        var air_support: float = air
         total = ground + air_support * 0.9 + navy * 0.45 + missile * 0.65 + defense * 0.25
         total *= 1.0 - float(c.war_fatigue) / 250.0
     else:
@@ -32,7 +33,8 @@ func _planning_attack_power(c: Dictionary, prefs: Dictionary) -> float:
     var navy: float = float(c.navy) * float(prefs.get("navy", 25.0)) / 100.0
     var defense: float = float(c.def) * float(prefs.get("def", 25.0)) / 100.0
     var missile: float = float(c.missile) * float(prefs.get("missile", 25.0)) / 100.0
-    var air_support: float = air * (1.0 - minf(0.55, defense / maxf(1.0, air + 5000.0)))
+    # Increasing our own PVO/PRO must only increase attacking power.
+    var air_support: float = air
     var total := ground + air_support * 0.9 + navy * 0.45 + missile * 0.65 + defense * 0.25
     return total * (1.0 - float(c.war_fatigue) / 250.0)
 

@@ -4,20 +4,22 @@ var world_map: Control
 var map_action_bar: HBoxContainer
 
 func _seed_countries() -> void:
+    # For army/air/navy/air-defense values, one unit equals one person.
+    # Missile values remain equipment/power units and do not consume population.
     countries = {
-        "RU": _c("Россия", 4200, 25, 7500, 6200, 3600, 7000, 6500, "рациональный"),
-        "UA": _c("Украина", 1200, 7, 5200, 2300, 450, 3300, 2700, "агрессивный"),
-        "PL": _c("Польша", 1800, 15, 3200, 2300, 750, 2700, 1600, "осторожный"),
-        "FR": _c("Франция", 3000, 24, 4300, 4700, 4000, 3900, 3100, "дипломатический"),
-        "DE": _c("Германия", 3200, 35, 4200, 4100, 1700, 3600, 1600, "осторожный"),
-        "GB": _c("Великобритания", 3100, 24, 3900, 5200, 5200, 3500, 3000, "дипломатический"),
-        "CN": _c("Китай", 7600, 75, 9000, 8500, 7800, 7600, 8100, "экономический"),
-        "IN": _c("Индия", 3500, 30, 6500, 5200, 4200, 3900, 4500, "авантюрный"),
-        "IR": _c("Иран", 1500, 10, 4600, 2200, 1600, 3200, 4400, "агрессивный"),
-        "JP": _c("Япония", 3000, 32, 3600, 5200, 5500, 4300, 2000, "осторожный")
+        "RU": _c("Россия", 4200, 25, 900000, 180000, 150000, 90000, 6500, "рациональный"),
+        "UA": _c("Украина", 1200, 7, 700000, 80000, 30000, 90000, 2700, "агрессивный"),
+        "PL": _c("Польша", 1800, 15, 150000, 30000, 15000, 21000, 1600, "осторожный"),
+        "FR": _c("Франция", 3000, 24, 115000, 40000, 35000, 15000, 3100, "дипломатический"),
+        "DE": _c("Германия", 3200, 35, 120000, 35000, 15000, 14000, 1600, "осторожный"),
+        "GB": _c("Великобритания", 3100, 24, 75000, 30000, 28000, 8000, 3000, "дипломатический"),
+        "CN": _c("Китай", 7600, 75, 975000, 400000, 300000, 360000, 8100, "экономический"),
+        "IN": _c("Индия", 3500, 30, 900000, 175000, 160000, 220000, 4500, "авантюрный"),
+        "IR": _c("Иран", 1500, 10, 350000, 70000, 30000, 160000, 4400, "агрессивный"),
+        "JP": _c("Япония", 3000, 32, 150000, 50000, 25000, 22000, 2000, "осторожный")
     }
 
-    # Population is stored in millions. Values are rounded for game balance.
+    # Population is stored in millions.
     countries["RU"]["population"] = 146.0
     countries["UA"]["population"] = 38.0
     countries["PL"]["population"] = 37.5
@@ -106,13 +108,17 @@ func _refresh_army() -> void:
         n.queue_free()
 
     _add_label(army_box, "АРМИЯ - %s" % countries[player_id].name, 24)
+    _add_label(army_box, "1 единица = 1 военнослужащий. Ракеты личный состав не занимают.", 16)
 
     for key in UNIT_KEYS:
         var row := VBoxContainer.new()
         army_box.add_child(row)
 
         var l := Label.new()
-        l.text = "%s: %d" % [UNIT_LABELS[key], int(countries[player_id][key])]
+        if key == "missile":
+            l.text = "%s: %d (без личного состава)" % [UNIT_LABELS[key], int(countries[player_id][key])]
+        else:
+            l.text = "%s: %d чел." % [UNIT_LABELS[key], int(countries[player_id][key])]
         row.add_child(l)
 
         var buttons := HBoxContainer.new()
@@ -136,9 +142,16 @@ func _buy_unit_amount(key: String, amount: int) -> void:
         _push_news("Недостаточно средств для покупки: %s x%d." % [UNIT_LABELS[key], amount])
         return
 
+    if not _can_recruit(p, key, float(amount)):
+        _push_news("Недостаточно свободного населения для увеличения «%s» на %d человек." % [UNIT_LABELS[key], amount])
+        return
+
     p.treasury -= price
     p[key] += float(amount)
-    _push_news("%s усиливает направление «%s» на %d." % [p.name, UNIT_LABELS[key], amount])
+    if key == "missile":
+        _push_news("%s увеличивает запас «%s» на %d. Население не используется." % [p.name, UNIT_LABELS[key], amount])
+    else:
+        _push_news("%s увеличивает «%s» на %d человек." % [p.name, UNIT_LABELS[key], amount])
     _refresh_all()
 
 func _process(delta: float) -> void:

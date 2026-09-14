@@ -3,6 +3,19 @@ extends "res://main_game_tuning.gd"
 var world_map: Control
 var map_action_bar: HBoxContainer
 
+const MILITARY_RATING_REFERENCE := 1600000.0
+
+func _military_rating(c: Dictionary) -> int:
+    # Display-only strategic index. Combat calculations still use the full raw values.
+    var weighted: float = (
+        float(c.army)
+        + float(c.air) * 0.90
+        + float(c.navy) * 0.45
+        + float(c.def) * 0.25
+        + float(c.missile) * 0.65
+    )
+    return clampi(int(round(weighted / MILITARY_RATING_REFERENCE * 1000.0)), 1, 1000)
+
 func _seed_countries() -> void:
     # For army/air/navy/air-defense values, one unit equals one person.
     # Missile values remain equipment/power units and do not consume population.
@@ -96,10 +109,23 @@ func _on_map_country_clicked(id: String) -> void:
         world_map.set_selected(id)
     _refresh_selected()
 
+func _refresh_top() -> void:
+    super._refresh_top()
+    if countries.has(player_id):
+        var p: Dictionary = countries[player_id]
+        military_label.text = "Население %.1f млн\nВоенные %.2f млн\nПотенциал %d/1000" % [
+            float(p.get("population", 0.0)),
+            _military_population(p),
+            _military_rating(p)
+        ]
+
 func _refresh_selected() -> void:
     super._refresh_selected()
     if countries.has(selected_id):
         var c: Dictionary = countries[selected_id]
+        for child in selected_panel.get_children():
+            if child is Label and str(child.text).begins_with("Военный потенциал:"):
+                child.text = "Военный потенциал: %d/1000" % _military_rating(c)
         _add_label(selected_panel, "Казна: %.0f млн" % float(c.treasury), 19)
     _style_all_buttons(selected_panel)
 

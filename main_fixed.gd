@@ -335,7 +335,6 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
 func _show_attack_alert(attacker_id: String, winner: String) -> void:
     var was_paused := paused
     paused = true
-    DisplayServer.beep()
     Input.vibrate_handheld(500)
 
     var dialog := AcceptDialog.new()

@@ -54,26 +54,23 @@ jobs:
             echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' >> "$SETTINGS"
           fi
 
-          echo "=== Godot config files ==="
-          ls -lah "$HOME/.config/godot/"
-          echo "=== Android export settings ==="
+          echo "=== Export templates ==="
+          ls -lah "$HOME/.local/share/godot/export_templates/4.3.stable/"
+          test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
+          test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
+
+          echo "=== Android editor settings ==="
           grep -n 'export/android' "$SETTINGS" || true
-          echo "=== Environment ==="
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -x "$JAVA_HOME/bin/java"
-          test -d "$ANDROID_HOME"
 
           godot --version
           java -version
 
-      - name: Install Android SDK 34
+      - name: Install complete Android toolchain for Godot 4.3
         shell: bash
         run: |
           set -e
 
           SDKMANAGER="$(find /usr/lib/android-sdk -type f -name sdkmanager | head -n 1)"
-
           echo "sdkmanager: $SDKMANAGER"
 
           if [ -z "$SDKMANAGER" ]; then
@@ -81,27 +78,31 @@ jobs:
             exit 1
           fi
 
-          yes | "$SDKMANAGER" \
-            --sdk_root=/usr/lib/android-sdk \
-            --licenses || true
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
 
           "$SDKMANAGER" \
-            --sdk_root=/usr/lib/android-sdk \
+            --sdk_root="$ANDROID_HOME" \
             "platform-tools" \
+            "build-tools;34.0.0" \
             "platforms;android-34" \
-            "build-tools;34.0.0"
+            "cmdline-tools;latest" \
+            "cmake;3.10.2.4988404" \
+            "ndk;23.2.8568313"
 
-          test -x /usr/lib/android-sdk/platform-tools/adb
-          test -d /usr/lib/android-sdk/platforms/android-34
-          test -d /usr/lib/android-sdk/build-tools/34.0.0
+          test -x "$ANDROID_HOME/platform-tools/adb"
+          test -d "$ANDROID_HOME/build-tools/34.0.0"
+          test -d "$ANDROID_HOME/platforms/android-34"
+          test -d "$ANDROID_HOME/cmake/3.10.2.4988404"
+          test -d "$ANDROID_HOME/ndk/23.2.8568313"
 
-          ls -lah /usr/lib/android-sdk/build-tools/
-          ls -lah /usr/lib/android-sdk/platforms/
+          echo "=== Installed Android packages ==="
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list_installed
 
       - name: Create debug keystore
         shell: bash
         run: |
           set -e
+
           if [ ! -f /root/debug.keystore ]; then
             keytool -genkeypair \
               -keystore /root/debug.keystore \

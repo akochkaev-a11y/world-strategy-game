@@ -89,6 +89,17 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
     if equipment_labels.size() < 2:
         return
 
+    # The fullscreen report is laid out left=attacker, right=defender.
+    # Scene-tree traversal order is not guaranteed, so sort by screen position.
+    var left_label: Label = equipment_labels[0]
+    var right_label: Label = equipment_labels[0]
+    for label in equipment_labels:
+        if label.global_position.x < left_label.global_position.x:
+            left_label = label
+        if label.global_position.x > right_label.global_position.x:
+            right_label = label
+
+    var report_labels := [left_label, right_label]
     var countries_order := [attacker_id, defender_id]
     for i in range(2):
         var country_id: String = countries_order[i]
@@ -102,7 +113,7 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
             treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
         elif is_winner and transfer > 0.0:
             treasury_label.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45, 1.0))
-        equipment_labels[i].get_parent().add_child(treasury_label)
+        report_labels[i].get_parent().add_child(treasury_label)
 
 func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: String, before_a: Dictionary, before_d: Dictionary, alosses: Dictionary, dlosses: Dictionary, apeop: float, dpeop: float, acost: float, dcost: float, transfer: float, a_financial: float, d_financial: float) -> void:
     var overlay_before: Array[Node] = get_children()

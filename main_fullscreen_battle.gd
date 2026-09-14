@@ -68,8 +68,6 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
     a.war_fatigue = minf(100.0, float(a.war_fatigue) + 5.0)
     d.war_fatigue = minf(100.0, float(d.war_fatigue) + 5.0)
 
-    # Financial settlement: both sides lose the value of destroyed equipment.
-    # The loser additionally transfers reparations/resources to the winner.
     a.treasury = maxf(0.0, float(a.treasury) - acost)
     d.treasury = maxf(0.0, float(d.treasury) - dcost)
     var transfer := 0.0
@@ -161,7 +159,6 @@ func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: S
     var counter_btn := Button.new(); counter_btn.text="ОТВЕТНЫЙ УДАР"; counter_btn.visible=false; counter_btn.custom_minimum_size=Vector2(240,58); buttons.add_child(counter_btn)
     var close_btn := Button.new(); close_btn.text="ЗАКРЫТЬ"; close_btn.custom_minimum_size=Vector2(240,58); close_btn.disabled=true; buttons.add_child(close_btn)
 
-    # Five animated rounds. Numbers and bars fall toward the actual post-battle values.
     for round_no in range(1,6):
         center_title.text="ХОД БОЯ\nРАУНД %d ИЗ 5" % round_no
         var t := float(round_no)/5.0
@@ -174,8 +171,9 @@ func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: S
             row_data[key].fx.text="%s   %s   💥   %s   %s" % [BATTLE_ICON[key],("➜" if round_no%2==1 else "══➤"),("⬅" if round_no%2==1 else "◀══"),BATTLE_ICON[key]]
         await get_tree().create_timer(0.38).timeout
 
-    var a_name:=countries[attacker_id].name; var d_name:=countries[defender_id].name
-    result_title.text = "НИЧЬЯ / БЕЗ РЕШАЮЩЕГО РЕЗУЛЬТАТА" if winner=="" else "★ ПОБЕДА %s" % countries[winner].name.to_upper()
+    var a_name: String = str(countries[attacker_id].name)
+    var d_name: String = str(countries[defender_id].name)
+    result_title.text = "НИЧЬЯ / БЕЗ РЕШАЮЩЕГО РЕЗУЛЬТАТА" if winner=="" else "★ ПОБЕДА %s" % str(countries[winner].name).to_upper()
 
     _add_label(left_report,"%s %s" % [BATTLE_FLAG.get(attacker_id,"🏳️"),a_name],21)
     _add_label(left_report,"Население: %.3f млн  (-%d)" % [float(countries[attacker_id].population),int(apeop)],16)

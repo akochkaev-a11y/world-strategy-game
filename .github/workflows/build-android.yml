@@ -26,6 +26,18 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
+      - name: Download real country boundaries
+        shell: bash
+        run: |
+          set -e
+          python3 - <<'PY'
+          import urllib.request
+          url='https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
+          urllib.request.urlretrieve(url, 'eurasia_countries.json')
+          PY
+          test -s eurasia_countries.json
+          echo "Natural Earth boundaries: $(wc -c < eurasia_countries.json) bytes"
+
       - name: Setup Godot
         shell: bash
         run: |
@@ -33,13 +45,10 @@ jobs:
           mkdir -p "$HOME/.config/godot" "$HOME/.local/share/godot/export_templates" build
           cp -a /root/.config/godot/. "$HOME/.config/godot/"
           cp -a /root/.local/share/godot/export_templates/4.3.stable "$HOME/.local/share/godot/export_templates/"
-
-          # Initialize the editor once, then locate the settings file Godot actually uses.
           godot --headless --editor --path . --quit || true
           SETTINGS="$(find "$HOME/.config/godot" -maxdepth 1 -type f -name 'editor_settings-*.tres' | head -n 1)"
           echo "Godot settings file: $SETTINGS"
           test -n "$SETTINGS"
-
           if grep -q '^export/android/java_sdk_path' "$SETTINGS"; then
             sed -i 's#^export/android/java_sdk_path.*#export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"#' "$SETTINGS"
           else
@@ -50,15 +59,7 @@ jobs:
           else
             echo 'export/android/android_sdk_path = "/usr/lib/android-sdk"' >> "$SETTINGS"
           fi
-
-          echo '=== Godot version ==='
           godot --version
-          echo '=== Config files ==='
-          ls -lah "$HOME/.config/godot/"
-          echo '=== Android editor settings ==='
-          grep -n 'export/android' "$SETTINGS" || true
-          echo '=== Export templates ==='
-          ls -lah "$HOME/.local/share/godot/export_templates/4.3.stable/"
           test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk"
           test -s "$HOME/.local/share/godot/export_templates/4.3.stable/android_release.apk"
 
@@ -75,8 +76,6 @@ jobs:
           test -x "$ANDROID_HOME/platform-tools/adb"
           test -d "$ANDROID_HOME/build-tools/34.0.0"
           test -d "$ANDROID_HOME/platforms/android-34"
-          test -d "$ANDROID_HOME/cmake/3.10.2.4988404"
-          test -d "$ANDROID_HOME/ndk/23.2.8568313"
 
       - name: Create debug keystore
         shell: bash
@@ -93,16 +92,9 @@ jobs:
         shell: bash
         run: |
           set +e
-          echo '=== export_presets.cfg ==='
-          cat export_presets.cfg
-          echo '=== project import/editor validation ==='
           godot --headless --editor --verbose --path . --quit 2>&1 | tee /tmp/editor.log
-          echo "editor exit=${PIPESTATUS[0]}"
-          echo '=== Android export diagnostic ==='
           godot --headless --verbose --path . --export-debug "Android" "build/diagnostic.apk" 2>&1 | tee /tmp/export.log
           EXPORT_RC=${PIPESTATUS[0]}
-          echo "export exit=$EXPORT_RC"
-          echo '=== Relevant diagnostic lines ==='
           grep -Ei 'error|warn|android|sdk|jdk|java|keystore|template|export|invalid|missing' /tmp/editor.log /tmp/export.log || true
           if grep -Eq 'SCRIPT ERROR|Parse Error|Failed to load script' /tmp/editor.log /tmp/export.log; then
             echo 'GDScript validation failed.'

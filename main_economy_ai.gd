@@ -4,6 +4,8 @@ const ECONOMY_POP_SENSITIVITY := 0.00008
 const MIN_ANNUAL_POP_GROWTH := -0.03
 const MAX_ANNUAL_POP_GROWTH := 0.025
 const POPULATION_INCOME_EXPONENT := 0.65
+const DAYS_PER_YEAR := 365.0
+const MILITARY_UPKEEP_PER_PERSON := 0.000008
 
 # Baseline demographic trend used by the 10 playable countries.
 # Economy and war fatigue modify these values dynamically during the game.
@@ -36,6 +38,23 @@ func _annual_population_growth(id: String) -> float:
     var fatigue_modifier: float = -float(c.war_fatigue) * 0.00004
     return clampf(natural + economy_modifier + fatigue_modifier, MIN_ANNUAL_POP_GROWTH, MAX_ANNUAL_POP_GROWTH)
 
+# One military unit equals one person for army, air force, navy and air defense.
+# Missiles are equipment and do not consume population.
+func _military_population(c: Dictionary) -> float:
+    var personnel: float = 0.0
+    personnel += float(c.get("army", 0.0))
+    personnel += float(c.get("air", 0.0))
+    personnel += float(c.get("navy", 0.0))
+    personnel += float(c.get("def", 0.0))
+    return personnel / 1000000.0
+
+func _can_recruit(c: Dictionary, key: String, amount: float) -> bool:
+    if key == "missile":
+        return true
+    var population: float = maxf(0.1, float(c.get("population", 100.0)))
+    var future_military: float = _military_population(c) + amount / 1000000.0
+    return future_military <= population * 0.12
+
 func _military_labor_factor(c: Dictionary) -> float:
     var population: float = maxf(0.1, float(c.get("population", 100.0)))
     var military_share: float = clampf(_military_population(c) / population, 0.0, 0.20)
@@ -54,16 +73,30 @@ func _effective_income(c: Dictionary) -> float:
     var population_factor: float = pow(population / initial_population, POPULATION_INCOME_EXPONENT)
     return maxf(0.0, float(c.income) * population_factor * _military_labor_factor(c))
 
+# Called once per game day. At x1, one real second equals one game day.
+func _demography_day_tick() -> void:
+    for id in countries.keys():
+        var c: Dictionary = countries[id]
+        var annual_growth: float = _annual_population_growth(id)
+        var daily_multiplier: float = pow(1.0 + annual_growth, 1.0 / DAYS_PER_YEAR)
+        c.population = maxf(0.1, float(c.population) * daily_multiplier)
+
+func _daily_population_change_people(id: String) -> float:
+    if not countries.has(id):
+        return 0.0
+    var c: Dictionary = countries[id]
+    var annual_growth: float = _annual_population_growth(id)
+    var daily_multiplier: float = pow(1.0 + annual_growth, 1.0 / DAYS_PER_YEAR)
+    return float(c.population) * 1000000.0 * (daily_multiplier - 1.0)
+
 func _economic_tick() -> void:
     for id in countries.keys():
         var c: Dictionary = countries[id]
-        var upkeep: float = _total_power(c) * 0.00008
+        var personnel_units: float = _military_population(c) * 1000000.0
+        var upkeep: float = personnel_units * MILITARY_UPKEEP_PER_PERSON
+        upkeep += float(c.get("missile", 0.0)) * 0.00008
         c.treasury += maxf(0.0, _effective_income(c) - upkeep)
         c.war_fatigue = maxf(0.0, float(c.war_fatigue) - 0.02)
-
-        var annual_growth: float = _annual_population_growth(id)
-        c.population = maxf(0.1, float(c.population) * (1.0 + annual_growth / 525600.0))
-
     _refresh_top()
 
 func _refresh_selected() -> void:
@@ -73,7 +106,9 @@ func _refresh_selected() -> void:
         var annual_growth: float = _annual_population_growth(selected_id) * 100.0
         var population: float = maxf(0.1, float(c.get("population", 100.0)))
         var military_share: float = 100.0 * _military_population(c) / population
+        var daily_people: float = _daily_population_change_people(selected_id)
         _add_label(selected_panel, "Демография: %+.2f%% в год" % annual_growth)
+        _add_label(selected_panel, "Изменение населения: %+.0f чел./день" % daily_people)
         _add_label(selected_panel, "Доля населения в армии: %.2f%%" % military_share)
         _add_label(selected_panel, "Влияние армии на доход: %.1f%%" % ((_military_labor_factor(c) - 1.0) * 100.0))
     _style_all_buttons(selected_panel)

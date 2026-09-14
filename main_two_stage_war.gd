@@ -42,10 +42,13 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
         acost += al*float(UNIT_COST[key])/100.0; dcost += dl*float(UNIT_COST[key])/100.0
     a.population=maxf(0.1,float(a.population)-apeop/1000000.0); d.population=maxf(0.1,float(d.population)-dpeop/1000000.0)
     a.war_fatigue=minf(100.0,float(a.war_fatigue)+5.0); d.war_fatigue=minf(100.0,float(d.war_fatigue)+5.0)
-    a.treasury=maxf(0.0,float(a.treasury)-acost); d.treasury=maxf(0.0,float(d.treasury)-dcost)
+
+    # Equipment was already paid for when purchased. Battle losses remove units,
+    # but do NOT charge treasury for the destroyed equipment a second time.
 
     # Reparation rule:
-    # loser pays 50% of the LOSER'S OWN equipment losses to the winner.
+    # loser pays 50% of the value of the LOSER'S OWN equipment losses to the winner,
+    # capped by the loser's current treasury.
     var loser: String = defender_id if winner==attacker_id else attacker_id
     var loser_loss_cost: float = dcost if loser==defender_id else acost
     var loser_country: Dictionary = countries[loser]
@@ -60,10 +63,10 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
         countries[winner].treasury += treasury_reparation
         transfer += treasury_reparation
 
-    # Winner = own equipment losses minus, reparation plus.
-    # Loser = own equipment losses minus, its own reparation minus.
-    var a_financial := -acost
-    var d_financial := -dcost
+    # Financial result now reflects only actual treasury movement in the battle.
+    # Equipment-loss value remains informational in the report and is not deducted again.
+    var a_financial := 0.0
+    var d_financial := 0.0
     if winner==attacker_id:
         a_financial += transfer
         d_financial -= transfer

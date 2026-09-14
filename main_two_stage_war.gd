@@ -44,20 +44,32 @@ func _resolve_battle(attacker_id: String, defender_id: String, attack_fraction: 
     a.war_fatigue=minf(100.0,float(a.war_fatigue)+5.0); d.war_fatigue=minf(100.0,float(d.war_fatigue)+5.0)
     a.treasury=maxf(0.0,float(a.treasury)-acost); d.treasury=maxf(0.0,float(d.treasury)-dcost)
 
+    # Reparation rule:
+    # loser pays 50% of the LOSER'S OWN equipment losses to the winner.
     var loser: String = defender_id if winner==attacker_id else attacker_id
     var loser_loss_cost: float = dcost if loser==defender_id else acost
     var loser_country: Dictionary = countries[loser]
     var transfer: float = minf(loser_loss_cost*0.5,float(loser_country.treasury))
-    loser_country.treasury -= transfer; countries[winner].treasury += transfer
+    loser_country.treasury -= transfer
+    countries[winner].treasury += transfer
+
     var treasury_reparation := 0.0
     if battle_stage == "invasion":
         treasury_reparation = float(loser_country.treasury)*INVASION_TREASURY_SHARE
-        loser_country.treasury -= treasury_reparation; countries[winner].treasury += treasury_reparation
+        loser_country.treasury -= treasury_reparation
+        countries[winner].treasury += treasury_reparation
         transfer += treasury_reparation
 
-    var a_financial := -acost; var d_financial := -dcost
-    if winner==attacker_id: a_financial+=transfer; d_financial-=transfer
-    else: d_financial+=transfer; a_financial-=transfer
+    # Winner = own equipment losses minus, reparation plus.
+    # Loser = own equipment losses minus, its own reparation minus.
+    var a_financial := -acost
+    var d_financial := -dcost
+    if winner==attacker_id:
+        a_financial += transfer
+        d_financial -= transfer
+    else:
+        d_financial += transfer
+        a_financial -= transfer
 
     var stage_name := "ВТОРЖЕНИЕ" if battle_stage=="invasion" else "ОБОРОНИТЕЛЬНЫЙ БОЙ"
     _push_news("БИТВА: %s - %s: победа %s (%s)." % [a.name,d.name,countries[winner].name,stage_name])
@@ -77,7 +89,7 @@ func _open_invasion_dialog(target: String) -> void:
     countries[player_id]["attack_prefs"]={"army":100.0,"air":100.0,"navy":100.0,"def":100.0,"missile":100.0}
     _resolve_battle(player_id,target,1.0,false)
 
-func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defender_id: String, winner: String, transfer: float) -> void:
+func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defender_id: String, a_financial: float, d_financial: float) -> void:
     var equipment_labels: Array[Label] = []
     var stack: Array[Node] = [overlay]
     while not stack.is_empty():
@@ -89,8 +101,6 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
     if equipment_labels.size() < 2:
         return
 
-    # The fullscreen report is laid out left=attacker, right=defender.
-    # Scene-tree traversal order is not guaranteed, so sort by screen position.
     var left_label: Label = equipment_labels[0]
     var right_label: Label = equipment_labels[0]
     for label in equipment_labels:
@@ -101,17 +111,16 @@ func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defen
 
     var report_labels := [left_label, right_label]
     var countries_order := [attacker_id, defender_id]
+    var financials := [a_financial, d_financial]
     for i in range(2):
         var country_id: String = countries_order[i]
-        var is_winner := winner != "" and country_id == winner
-        var sign := "+" if is_winner and transfer > 0.0 else "-"
-        var amount := transfer if transfer > 0.0 else 0.0
+        var delta: float = financials[i]
         var treasury_label := Label.new()
         treasury_label.add_theme_font_size_override("font_size", 15)
-        treasury_label.text = "Казна: %.0f млн  (%s%.0f млн)" % [float(countries[country_id].treasury), sign, amount]
-        if not is_winner and transfer > 0.0:
+        treasury_label.text = "Казна: %.0f млн  (%+.0f млн)" % [float(countries[country_id].treasury), delta]
+        if delta < 0.0:
             treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
-        elif is_winner and transfer > 0.0:
+        elif delta > 0.0:
             treasury_label.add_theme_color_override("font_color", Color(0.35, 0.95, 0.45, 1.0))
         report_labels[i].get_parent().add_child(treasury_label)
 
@@ -120,7 +129,7 @@ func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: S
     await super._show_fullscreen_battle(attacker_id,defender_id,winner,before_a,before_d,alosses,dlosses,apeop,dpeop,acost,dcost,transfer,a_financial,d_financial)
     for node in get_children():
         if node not in overlay_before and node is ColorRect:
-            _add_treasury_to_battle_report(node as Control, attacker_id, defender_id, winner, transfer)
+            _add_treasury_to_battle_report(node as Control, attacker_id, defender_id, a_financial, d_financial)
             break
     if pending_counter_target != "":
         var target := pending_counter_target

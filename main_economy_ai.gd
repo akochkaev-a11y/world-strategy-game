@@ -7,9 +7,9 @@ const POPULATION_INCOME_EXPONENT := 0.65
 const DAYS_PER_YEAR := 365.0
 const MILITARY_UPKEEP_PER_PERSON := 0.000008
 const BOT_SAVINGS_SHARE := 0.20
+const BOT_RECOVERY_MARGIN := 0.05
+const BOT_DEMOBILIZE_SHARE := 0.02
 
-# Baseline demographic trend used by the 10 playable countries.
-# Economy and war fatigue modify these values dynamically during the game.
 const PLAYABLE_BASE_GROWTH := {
     "RU": -0.005,
     "UA": -0.007,
@@ -33,6 +33,8 @@ func _ensure_population_data() -> void:
             c["war_cooldown"] = 0
         if not c.has("protected_treasury"):
             c["protected_treasury"] = float(c.treasury) * BOT_SAVINGS_SHARE if id != player_id else 0.0
+        if not c.has("economic_recovery"):
+            c["economic_recovery"] = false
 
 func _annual_population_growth(id: String) -> float:
     var c: Dictionary = countries[id]
@@ -41,8 +43,6 @@ func _annual_population_growth(id: String) -> float:
     var fatigue_modifier: float = -float(c.war_fatigue) * 0.00004
     return clampf(natural + economy_modifier + fatigue_modifier, MIN_ANNUAL_POP_GROWTH, MAX_ANNUAL_POP_GROWTH)
 
-# One military unit equals one person for army, air force, navy and air defense.
-# Missiles are equipment and do not consume population.
 func _military_population(c: Dictionary) -> float:
     var personnel: float = 0.0
     personnel += float(c.get("army", 0.0))
@@ -61,7 +61,6 @@ func _can_recruit(c: Dictionary, key: String, amount: float) -> bool:
 func _military_labor_factor(c: Dictionary) -> float:
     var population: float = maxf(0.1, float(c.get("population", 100.0)))
     var military_share: float = clampf(_military_population(c) / population, 0.0, 0.20)
-
     if military_share <= 0.01:
         return 1.0 - military_share * 0.25
     if military_share <= 0.03:
@@ -76,7 +75,25 @@ func _effective_income(c: Dictionary) -> float:
     var population_factor: float = pow(population / initial_population, POPULATION_INCOME_EXPONENT)
     return maxf(0.0, float(c.income) * population_factor * _military_labor_factor(c))
 
-# One real second at x1 equals one game day.
+func _military_upkeep(c: Dictionary) -> float:
+    var personnel_units: float = _military_population(c) * 1000000.0
+    return personnel_units * MILITARY_UPKEEP_PER_PERSON + float(c.get("missile", 0.0)) * 0.00008
+
+func _raw_net_income(c: Dictionary) -> float:
+    return _effective_income(c) - _military_upkeep(c)
+
+func _bot_needs_recovery(c: Dictionary) -> bool:
+    var effective: float = _effective_income(c)
+    return _raw_net_income(c) <= effective * BOT_RECOVERY_MARGIN
+
+func _bot_demobilize_step(c: Dictionary) -> void:
+    # Reduce personnel gradually, preserving the army's composition.
+    for key in ["army", "air", "navy", "def"]:
+        c[key] = maxf(0.0, float(c.get(key, 0.0)) * (1.0 - BOT_DEMOBILIZE_SHARE))
+    # If personnel cuts are not enough, reduce costly missile stock as well.
+    if _raw_net_income(c) <= 0.0:
+        c.missile = maxf(0.0, float(c.get("missile", 0.0)) * (1.0 - BOT_DEMOBILIZE_SHARE))
+
 func _demography_day_tick() -> void:
     for id in countries.keys():
         var c: Dictionary = countries[id]
@@ -98,13 +115,12 @@ func _bot_spendable_treasury(c: Dictionary) -> float:
 func _economic_tick() -> void:
     for id in countries.keys():
         var c: Dictionary = countries[id]
-        var personnel_units: float = _military_population(c) * 1000000.0
-        var upkeep: float = personnel_units * MILITARY_UPKEEP_PER_PERSON
-        upkeep += float(c.get("missile", 0.0)) * 0.00008
-        var net_income: float = maxf(0.0, _effective_income(c) - upkeep)
+        var raw_net: float = _raw_net_income(c)
+        var net_income: float = maxf(0.0, raw_net)
         c.treasury += net_income
         if id != player_id:
             c.protected_treasury = minf(float(c.treasury), float(c.get("protected_treasury", 0.0)) + net_income * BOT_SAVINGS_SHARE)
+            c.economic_recovery = _bot_needs_recovery(c)
         c.war_fatigue = maxf(0.0, float(c.war_fatigue) - 0.02)
     _refresh_top()
 

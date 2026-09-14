@@ -101,6 +101,46 @@ func _refresh_selected() -> void:
         _add_label(selected_panel, "Казна: %.0f млн" % float(c.treasury), 19)
     _style_all_buttons(selected_panel)
 
+func _refresh_army() -> void:
+    for n in army_box.get_children():
+        n.queue_free()
+
+    _add_label(army_box, "АРМИЯ - %s" % countries[player_id].name, 24)
+
+    for key in UNIT_KEYS:
+        var row := VBoxContainer.new()
+        army_box.add_child(row)
+
+        var l := Label.new()
+        l.text = "%s: %d" % [UNIT_LABELS[key], int(countries[player_id][key])]
+        row.add_child(l)
+
+        var buttons := HBoxContainer.new()
+        buttons.add_theme_constant_override("separation", 5)
+        row.add_child(buttons)
+
+        for amount in [100, 1000, 10000]:
+            var b := Button.new()
+            var price: float = _unit_price(player_id, key) * float(amount) / 100.0
+            b.text = "+%d\n%.0f млн" % [amount, price]
+            b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            b.custom_minimum_size.y = 54
+            b.pressed.connect(_buy_unit_amount.bind(key, amount))
+            buttons.add_child(b)
+
+func _buy_unit_amount(key: String, amount: int) -> void:
+    var p: Dictionary = countries[player_id]
+    var price: float = _unit_price(player_id, key) * float(amount) / 100.0
+
+    if float(p.treasury) < price:
+        _push_news("Недостаточно средств для покупки: %s x%d." % [UNIT_LABELS[key], amount])
+        return
+
+    p.treasury -= price
+    p[key] += float(amount)
+    _push_news("%s усиливает направление «%s» на %d." % [p.name, UNIT_LABELS[key], amount])
+    _refresh_all()
+
 func _process(delta: float) -> void:
     super._process(delta)
     if world_map and is_instance_valid(world_map) and world_map.selected_id != selected_id:

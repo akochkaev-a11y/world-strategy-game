@@ -77,8 +77,36 @@ func _open_invasion_dialog(target: String) -> void:
     countries[player_id]["attack_prefs"]={"army":100.0,"air":100.0,"navy":100.0,"def":100.0,"missile":100.0}
     _resolve_battle(player_id,target,1.0,false)
 
+func _add_treasury_to_battle_report(overlay: Control, attacker_id: String, defender_id: String, winner: String, transfer: float) -> void:
+    var equipment_labels: Array[Label] = []
+    var stack: Array[Node] = [overlay]
+    while not stack.is_empty():
+        var node: Node = stack.pop_back()
+        for child in node.get_children():
+            stack.push_back(child)
+            if child is Label and str(child.text).begins_with("Техника и вооружение:"):
+                equipment_labels.append(child as Label)
+    if equipment_labels.size() < 2:
+        return
+
+    var countries_order := [attacker_id, defender_id]
+    for i in range(2):
+        var country_id: String = countries_order[i]
+        var payment: float = transfer if winner != "" and country_id != winner else 0.0
+        var treasury_label := Label.new()
+        treasury_label.add_theme_font_size_override("font_size", 15)
+        treasury_label.text = "Казна: %.0f млн  (-%.0f млн)" % [float(countries[country_id].treasury), payment]
+        if payment > 0.0:
+            treasury_label.add_theme_color_override("font_color", Color(0.95, 0.25, 0.25, 1.0))
+        equipment_labels[i].get_parent().add_child(treasury_label)
+
 func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: String, before_a: Dictionary, before_d: Dictionary, alosses: Dictionary, dlosses: Dictionary, apeop: float, dpeop: float, acost: float, dcost: float, transfer: float, a_financial: float, d_financial: float) -> void:
+    var overlay_before: Array[Node] = get_children()
     await super._show_fullscreen_battle(attacker_id,defender_id,winner,before_a,before_d,alosses,dlosses,apeop,dpeop,acost,dcost,transfer,a_financial,d_financial)
+    for node in get_children():
+        if node not in overlay_before and node is ColorRect:
+            _add_treasury_to_battle_report(node as Control, attacker_id, defender_id, winner, transfer)
+            break
     if pending_counter_target != "":
         var target := pending_counter_target
         pending_counter_target=""

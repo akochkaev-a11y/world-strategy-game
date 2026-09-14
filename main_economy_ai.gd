@@ -5,6 +5,21 @@ const MIN_ANNUAL_POP_GROWTH := -0.03
 const MAX_ANNUAL_POP_GROWTH := 0.025
 const POPULATION_INCOME_EXPONENT := 0.65
 
+# Baseline demographic trend used by the 10 playable countries.
+# Economy and war fatigue modify these values dynamically during the game.
+const PLAYABLE_BASE_GROWTH := {
+    "RU": -0.005,
+    "UA": -0.007,
+    "PL": -0.002,
+    "FR": 0.002,
+    "DE": -0.002,
+    "GB": 0.004,
+    "CN": -0.002,
+    "IN": 0.008,
+    "IR": 0.006,
+    "JP": -0.005
+}
+
 func _ensure_population_data() -> void:
     super._ensure_population_data()
     for id in countries.keys():
@@ -16,7 +31,7 @@ func _ensure_population_data() -> void:
 
 func _annual_population_growth(id: String) -> float:
     var c: Dictionary = countries[id]
-    var natural: float = float(POP_GROWTH_ANNUAL.get(id, 0.003))
+    var natural: float = float(PLAYABLE_BASE_GROWTH.get(id, POP_GROWTH_ANNUAL.get(id, 0.003)))
     var economy_modifier: float = (float(c.economy) - 100.0) * ECONOMY_POP_SENSITIVITY
     var fatigue_modifier: float = -float(c.war_fatigue) * 0.00004
     return clampf(natural + economy_modifier + fatigue_modifier, MIN_ANNUAL_POP_GROWTH, MAX_ANNUAL_POP_GROWTH)

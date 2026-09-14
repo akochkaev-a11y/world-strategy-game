@@ -30,11 +30,15 @@ jobs:
         shell: bash
         run: |
           set -e
-          python3 - <<'PY'
-          import urllib.request
-          url='https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
-          urllib.request.urlretrieve(url, 'eurasia_countries.json')
-          PY
+          URL="https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
+          if command -v curl >/dev/null 2>&1; then
+            curl -LfsS "$URL" -o eurasia_countries.json
+          elif command -v wget >/dev/null 2>&1; then
+            wget -qO eurasia_countries.json "$URL"
+          else
+            echo "Neither curl nor wget is available in the Godot container."
+            exit 1
+          fi
           test -s eurasia_countries.json
           echo "Natural Earth boundaries: $(wc -c < eurasia_countries.json) bytes"
 

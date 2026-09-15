@@ -1,208 +1,155 @@
 extends "res://main_game_tuning.gd"
 
-const TACTICAL_KEYS := ["army", "air", "navy", "def", "missile"]
-const TACTICAL_NAMES := {"army":"Сухопутные", "air":"Авиация", "navy":"Флот", "def":"ПВО/ПРО", "missile":"Ракеты"}
-const TACTICAL_SYMBOLS := {"army":"■", "air":"▲", "navy":"◆", "def":"⬟", "missile":"●"}
-const TACTICAL_COLORS := {"army":Color("63d471"), "air":Color("57c7ff"), "navy":Color("4d7cff"), "def":Color("ffd166"), "missile":Color("ff5d73")}
-const ZONES := ["СЕВЕР", "ЦЕНТР", "ЮГ"]
+# One-field real-time battle: troops control the field, missiles are expendable strikes.
 var tactical_active := false
 
 class BattleField:
     extends Control
-    signal order_sent(key, zone, share)
-    var source_rects := {}
-    var zone_rects := {}
-    var forces := {}
-    var enemy := {}
-    var moving := []
-    var flashes := []
-    var drag_key := ""
-    var drag_from := Vector2.ZERO
-    var drag_to := Vector2.ZERO
-    var dragging := false
-    var pulse := 0.0
-
-    func setup(pforces:Dictionary, eforces:Dictionary)->void:
-        forces=pforces; enemy=eforces
-        mouse_filter=Control.MOUSE_FILTER_STOP
-        set_process(true)
-        queue_redraw()
+    signal send_troops(share)
+    signal send_missiles(share)
+    var our_reserve:=0.0
+    var our_missiles:=0.0
+    var enemy_reserve:=0.0
+    var enemy_missiles:=0.0
+    var our_field:=0.0
+    var enemy_field:=0.0
+    var our_flag:="🇷🇺"
+    var enemy_flag:="🏳️"
+    var dragging:=""
+    var drag_from:=Vector2.ZERO
+    var drag_to:=Vector2.ZERO
+    var movers:=[]
+    var blasts:=[]
 
     func _process(delta:float)->void:
-        pulse += delta
-        for m in moving:
-            m.t = minf(1.0,float(m.t)+delta*float(m.speed))
-        for i in range(moving.size()-1,-1,-1):
-            if float(moving[i].t)>=1.0: moving.remove_at(i)
-        for i in range(flashes.size()-1,-1,-1):
-            flashes[i].life=float(flashes[i].life)-delta
-            if float(flashes[i].life)<=0.0: flashes.remove_at(i)
+        for m in movers: m.t=float(m.t)+delta*float(m.speed)
+        for i in range(movers.size()-1,-1,-1):
+            if float(movers[i].t)>=1.0:movers.remove_at(i)
+        for b in blasts:b.life=float(b.life)-delta
+        for i in range(blasts.size()-1,-1,-1):
+            if float(blasts[i].life)<=0:blasts.remove_at(i)
         queue_redraw()
 
-    func launch(key:String, zone:String, amount:float)->void:
-        if amount<=0.0 or not source_rects.has(key) or not zone_rects.has(zone): return
-        var start:Vector2=source_rects[key].get_center()
-        var finish:Vector2=zone_rects[zone].get_center()
-        var count:=clampi(int(4.0+sqrt(amount/maxf(1.0,10000.0))*2.5),4,22)
-        for i in range(count):
-            moving.append({"key":key,"from":start+Vector2(randf_range(-12,12),randf_range(-12,12)),"to":finish+Vector2(randf_range(-35,35),randf_range(-24,24)),"t":-float(i)*0.035,"speed":randf_range(0.75,1.15)})
+    func launch(kind:String,enemy_side:bool=false)->void:
+        var start:=Vector2(size.x-100,size.y*(0.38 if kind=="troops" else 0.68)) if enemy_side else Vector2(100,size.y*(0.38 if kind=="troops" else 0.68))
+        var target:=Vector2(size.x*0.5,size.y*0.5)
+        var n:=12 if kind=="troops" else 5
+        for i in range(n):movers.append({"kind":kind,"enemy":enemy_side,"from":start+Vector2(randf_range(-20,20),randf_range(-15,15)),"to":target+Vector2(randf_range(-55,55),randf_range(-45,45)),"t":-i*0.045,"speed":randf_range(0.65,1.05)})
+    func explode()->void:
+        for i in range(4):blasts.append({"p":Vector2(size.x*0.5,size.y*0.5)+Vector2(randf_range(-70,70),randf_range(-55,55)),"life":0.45})
 
-    func hit(zone:String)->void:
-        if zone_rects.has(zone): flashes.append({"pos":zone_rects[zone].get_center()+Vector2(randf_range(-45,45),randf_range(-25,25)),"life":0.35})
-
-    func _gui_input(event:InputEvent)->void:
-        var pos:=Vector2.ZERO
-        var press:=false; var release:=false; var motion:=false
-        if event is InputEventScreenTouch:
-            pos=event.position; press=event.pressed; release=not event.pressed
-        elif event is InputEventScreenDrag:
-            pos=event.position; motion=true
-        elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
-            pos=event.position; press=event.pressed; release=not event.pressed
-        elif event is InputEventMouseMotion and dragging:
-            pos=event.position; motion=true
-        else: return
-        if press:
-            for key in source_rects:
-                if source_rects[key].has_point(pos) and float(forces.get(key,0.0))>0.0:
-                    drag_key=key; drag_from=source_rects[key].get_center(); drag_to=pos; dragging=true; accept_event(); return
-        if motion and dragging:
-            drag_to=pos; queue_redraw(); accept_event(); return
-        if release and dragging:
-            drag_to=pos
-            var target:=""
-            for zone in zone_rects:
-                if zone_rects[zone].has_point(pos): target=zone
-            if target!="":
-                var distance:=drag_from.distance_to(pos)
-                var share:=0.25 if distance<size.x*0.42 else (0.50 if distance<size.x*0.62 else 1.0)
-                order_sent.emit(drag_key,target,share)
-            dragging=false; drag_key=""; queue_redraw(); accept_event()
+    func _gui_input(e:InputEvent)->void:
+        var p:=Vector2.ZERO;var down:=false;var up:=false;var move:=false
+        if e is InputEventScreenTouch:p=e.position;down=e.pressed;up=not e.pressed
+        elif e is InputEventScreenDrag:p=e.position;move=true
+        elif e is InputEventMouseButton and e.button_index==MOUSE_BUTTON_LEFT:p=e.position;down=e.pressed;up=not e.pressed
+        elif e is InputEventMouseMotion and dragging!="":p=e.position;move=true
+        else:return
+        var tr:=Rect2(18,size.y*0.24,size.x*0.20,size.y*0.25);var mr:=Rect2(18,size.y*0.58,size.x*0.20,size.y*0.20);var battlefield:=Rect2(size.x*0.29,size.y*0.17,size.x*0.42,size.y*0.66)
+        if down:
+            if tr.has_point(p) and our_reserve>0:dragging="troops";drag_from=tr.get_center();drag_to=p
+            elif mr.has_point(p) and our_missiles>0:dragging="missiles";drag_from=mr.get_center();drag_to=p
+        elif move and dragging!="":drag_to=p
+        elif up and dragging!="":
+            if battlefield.has_point(p):
+                var dist:=drag_from.distance_to(p);var share:=0.25 if dist<size.x*0.40 else (0.5 if dist<size.x*0.55 else 1.0)
+                if dragging=="troops":send_troops.emit(share)
+                else:send_missiles.emit(share)
+            dragging=""
+        queue_redraw();accept_event()
 
     func _draw()->void:
-        var w:=size.x; var h:=size.y
-        draw_rect(Rect2(Vector2.ZERO,size),Color("163f39"))
-        for i in range(9):
-            var y:=h*float(i)/8.0
-            draw_line(Vector2(0,y),Vector2(w,y),Color(0.18,0.42,0.31,0.35),2)
-        draw_circle(Vector2(w*0.50,h*0.50),minf(w,h)*0.18,Color(0.10,0.24,0.19,0.55))
-        draw_line(Vector2(w*0.5,0),Vector2(w*0.5,h),Color(1,1,1,0.16),3)
-        var row_h:=h/5.0
-        for i in range(TACTICAL_KEYS.size()):
-            var key:String=TACTICAL_KEYS[i]
-            var r:=Rect2(12,8+i*row_h,w*0.19,row_h-12)
-            source_rects[key]=r
-            draw_style_box(_box(TACTICAL_COLORS[key],Color(0.03,0.08,0.10,0.92)),r)
-            draw_string(ThemeDB.fallback_font,r.position+Vector2(10,22),"%s %s" % [TACTICAL_SYMBOLS[key],TACTICAL_NAMES[key]],HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
-            draw_string(ThemeDB.fallback_font,r.position+Vector2(10,44),_compact(float(forces.get(key,0.0))),HORIZONTAL_ALIGNMENT_LEFT,-1,17,TACTICAL_COLORS[key])
-            var er:=Rect2(w-r.size.x-12,r.position.y,r.size.x,r.size.y)
-            draw_style_box(_box(Color("ff6b5f"),Color(0.20,0.055,0.055,0.92)),er)
-            draw_string(ThemeDB.fallback_font,er.position+Vector2(10,22),"%s %s" % [TACTICAL_SYMBOLS[key],TACTICAL_NAMES[key]],HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
-            draw_string(ThemeDB.fallback_font,er.position+Vector2(10,44),_compact(float(enemy.get(key,0.0))),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("ff9a91"))
-        var center_left:=w*0.27; var center_width:=w*0.46
-        for i in range(ZONES.size()):
-            var zh:=h/3.0
-            var zr:=Rect2(center_left,8+i*zh,center_width,zh-16)
-            zone_rects[ZONES[i]]=zr
-            var glow:=0.05+0.025*sin(pulse*2.0+i)
-            draw_style_box(_box(Color(0.28,0.76,0.50,0.55),Color(0.04+glow,0.15+glow,0.12+glow,0.78)),zr)
-            draw_string(ThemeDB.fallback_font,zr.position+Vector2(12,24),ZONES[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("dfffe8"))
-        for m in moving:
-            var t:=clampf(float(m.t),0.0,1.0); var p:Vector2=Vector2(m.from).lerp(Vector2(m.to),t); _draw_unit(str(m.key),p,TACTICAL_COLORS[str(m.key)])
-        for f in flashes:
-            var rad:=26.0*float(f.life)/0.35+5.0
-            draw_circle(Vector2(f.pos),rad,Color(1.0,0.55,0.12,0.55))
-            draw_circle(Vector2(f.pos),rad*0.45,Color(1.0,0.95,0.55,0.9))
-        if dragging:
-            draw_line(drag_from,drag_to,Color("fff08a"),7,true)
-            var dir:=(drag_to-drag_from).normalized()
-            if dir.length()>0.1:
-                var tip:=drag_to; draw_colored_polygon(PackedVector2Array([tip,tip-dir*22+dir.rotated(1.57)*10,tip-dir*22+dir.rotated(-1.57)*10]),Color("fff08a"))
-
-    func _box(border:Color,bg:Color)->StyleBoxFlat:
-        var s:=StyleBoxFlat.new(); s.bg_color=bg; s.border_color=border; s.set_border_width_all(3); s.set_corner_radius_all(12); return s
-    func _compact(v:float)->String:
-        if v>=1000000.0: return "%.2f млн"%(v/1000000.0)
-        if v>=1000.0: return "%.0f тыс"%(v/1000.0)
+        var w:=size.x;var h:=size.y
+        draw_rect(Rect2(Vector2.ZERO,size),Color("174936"))
+        for i in range(10):draw_line(Vector2(0,h*i/9.0),Vector2(w,h*i/9.0),Color(0.2,0.55,0.3,0.18),2)
+        var tr:=Rect2(18,h*0.24,w*0.20,h*0.25);var mr:=Rect2(18,h*0.58,w*0.20,h*0.20);var er:=Rect2(w*0.78,h*0.24,w*0.20,h*0.25);var em:=Rect2(w*0.78,h*0.58,w*0.20,h*0.20);var bf:=Rect2(w*0.29,h*0.17,w*0.42,h*0.66)
+        _panel(tr,Color("3ddc84"),Color(0.03,0.15,0.09,0.92));_panel(mr,Color("ffcf4a"),Color(0.17,0.12,0.03,0.92));_panel(er,Color("ff655b"),Color(0.20,0.04,0.04,0.92));_panel(em,Color("ff9b45"),Color(0.20,0.08,0.03,0.92))
+        draw_string(ThemeDB.fallback_font,tr.position+Vector2(12,28),"■ ВОЙСКА",0,-1,18,Color.WHITE);draw_string(ThemeDB.fallback_font,tr.position+Vector2(12,58),_num(our_reserve),0,-1,24,Color("65ff9e"))
+        draw_string(ThemeDB.fallback_font,mr.position+Vector2(12,28),"● РАКЕТЫ",0,-1,18,Color.WHITE);draw_string(ThemeDB.fallback_font,mr.position+Vector2(12,58),_num(our_missiles),0,-1,24,Color("ffe27a"))
+        draw_string(ThemeDB.fallback_font,er.position+Vector2(12,28),"ВОЙСКА ■",0,-1,18,Color.WHITE);draw_string(ThemeDB.fallback_font,er.position+Vector2(12,58),_num(enemy_reserve),0,-1,24,Color("ff8c84"))
+        draw_string(ThemeDB.fallback_font,em.position+Vector2(12,28),"РАКЕТЫ ●",0,-1,18,Color.WHITE);draw_string(ThemeDB.fallback_font,em.position+Vector2(12,58),_num(enemy_missiles),0,-1,24,Color("ffb474"))
+        var control:=our_field-enemy_field;var bg:=Color(0.12,0.14,0.15,0.94)
+        if control>1:bg=Color(0.05,0.25,0.12,0.94)
+        elif control<-1:bg=Color(0.30,0.06,0.05,0.94)
+        _panel(bf,Color("e6edf3"),bg)
+        draw_string(ThemeDB.fallback_font,bf.position+Vector2(0,32),"ПОЛЕ БОЯ",HORIZONTAL_ALIGNMENT_CENTER,bf.size.x,22,Color.WHITE)
+        var text:="НЕЙТРАЛЬНО\n0"
+        var col:=Color("d8dee4")
+        if our_field>0 and enemy_field>0:text="%s %s   ⚔   %s %s"%[our_flag,_num(our_field),enemy_flag,_num(enemy_field)];col=Color("fff0a6")
+        elif our_field>0:text="%s  %s"%[our_flag,_num(our_field)];col=Color("65ff9e")
+        elif enemy_field>0:text="%s  %s"%[enemy_flag,_num(enemy_field)];col=Color("ff8c84")
+        draw_string(ThemeDB.fallback_font,bf.position+Vector2(0,bf.size.y*0.55),text,HORIZONTAL_ALIGNMENT_CENTER,bf.size.x,28,col)
+        for m in movers:
+            var t:=clampf(float(m.t),0,1);var p:Vector2=Vector2(m.from).lerp(Vector2(m.to),t);var c:=Color("ff655b") if bool(m.enemy) else Color("65ff9e")
+            if str(m.kind)=="troops":draw_rect(Rect2(p-Vector2(5,5),Vector2(10,10)),c)
+            else:draw_circle(p,5,Color("ffcf4a"));draw_line(p+Vector2(-15,0),p+Vector2(-5,0),Color(1,0.4,0.1,0.8),3)
+        for b in blasts:draw_circle(Vector2(b.p),10+35*float(b.life),Color(1,0.55,0.1,0.55));draw_circle(Vector2(b.p),8+15*float(b.life),Color(1,0.95,0.5,0.9))
+        if dragging!="":draw_line(drag_from,drag_to,Color("fff08a"),7,true)
+    func _panel(r:Rect2,border:Color,bg:Color)->void:
+        var s:=StyleBoxFlat.new();s.bg_color=bg;s.border_color=border;s.set_border_width_all(3);s.set_corner_radius_all(14);draw_style_box(s,r)
+    func _num(v:float)->String:
+        if v>=1000000:return "%.2f млн"%(v/1000000)
+        if v>=1000:return "%.0f тыс"%(v/1000)
         return "%.0f"%v
-    func _draw_unit(key:String,p:Vector2,c:Color)->void:
-        if key=="army": draw_rect(Rect2(p-Vector2(5,5),Vector2(10,10)),c)
-        elif key=="air": draw_colored_polygon(PackedVector2Array([p+Vector2(0,-7),p+Vector2(-7,6),p+Vector2(7,6)]),c)
-        elif key=="navy": draw_colored_polygon(PackedVector2Array([p+Vector2(0,-7),p+Vector2(-8,0),p+Vector2(0,7),p+Vector2(8,0)]),c)
-        elif key=="def": draw_circle(p,7,c); draw_circle(p,4,Color("163f39"))
-        else: draw_circle(p,5,c); draw_line(p-Vector2(14,0),p-Vector2(5,0),Color(1,0.7,0.2,0.65),3)
 
-func _resolve_battle(attacker_id:String,defender_id:String,attack_fraction:float,silent_bot:bool=false)->void:
-    if attacker_id!=player_id and defender_id!=player_id: super._resolve_battle(attacker_id,defender_id,attack_fraction,silent_bot); return
-    if tactical_active or _are_allies(attacker_id,defender_id): return
-    _start_tactical_battle(attacker_id,defender_id,attack_fraction)
+func _resolve_battle(attacker_id:String,defender_id:String,attack_fraction:float=1.0,silent_bot:bool=false)->void:
+    if attacker_id!=player_id and defender_id!=player_id:super._resolve_battle(attacker_id,defender_id,attack_fraction,silent_bot);return
+    if tactical_active or _are_allies(attacker_id,defender_id):return
+    _start_tactical_battle(attacker_id,defender_id)
 
-func _start_tactical_battle(attacker_id:String,defender_id:String,attack_fraction:float)->void:
-    tactical_active=true; var old_paused:=paused; paused=true
-    var ps:=attacker_id if attacker_id==player_id else defender_id; var es:=defender_id if attacker_id==player_id else attacker_id
-    var reserve:={}; var ereserve:={}; var initial:={}; var einitial:={}
-    for key in TACTICAL_KEYS:
-        reserve[key]=float(countries[ps][key])*(attack_fraction if ps==attacker_id else 1.0); ereserve[key]=float(countries[es][key])*(1.0 if es==defender_id else attack_fraction); initial[key]=reserve[key]; einitial[key]=ereserve[key]
-    var dep:={}; var edep:={}
-    for z in ZONES:
-        dep[z]={}; edep[z]={}
-        for key in TACTICAL_KEYS: dep[z][key]=0.0; edep[z][key]=float(ereserve[key])/3.0
-    var overlay:=ColorRect.new(); overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); overlay.color=Color("081b25"); overlay.mouse_filter=Control.MOUSE_FILTER_STOP; overlay.z_index=700; add_child(overlay)
-    var root:=VBoxContainer.new(); root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); root.offset_left=8; root.offset_right=-8; root.offset_top=8; root.offset_bottom=-8; overlay.add_child(root)
-    var title:=Label.new(); title.text="%s  ⚔  %s"%[countries[ps].name,countries[es].name]; title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER; title.add_theme_font_size_override("font_size",22); root.add_child(title)
-    var help:=Label.new(); help.text="ТЯНИ ПАЛЬЦЕМ ОТ СВОИХ ВОЙСК К СЕКТОРУ • ближе 25% • дальше 50% • до противника 100%"; help.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER; help.add_theme_font_size_override("font_size",13); root.add_child(help)
-    var field:=BattleField.new(); field.size_flags_vertical=Control.SIZE_EXPAND_FILL; field.size_flags_horizontal=Control.SIZE_EXPAND_FILL; field.custom_minimum_size=Vector2(700,420); root.add_child(field); field.setup(reserve,ereserve)
-    var status:=Label.new(); status.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER; status.text="Захватывайте направления и перебрасывайте подкрепления прямо во время боя"; root.add_child(status)
-    var finish:=Button.new(); finish.text="ЗАВЕРШИТЬ БОЙ"; finish.custom_minimum_size.y=54; root.add_child(finish)
-    field.order_sent.connect(func(key:String,zone:String,share:float):
-        var send:=float(reserve[key])*share
-        if send<=0.0:return
-        reserve[key]-=send; dep[zone][key]=float(dep[zone][key])+send; field.launch(key,zone,send)
-    )
-    var done:=[false]; finish.pressed.connect(func():done[0]=true); var elapsed:=0.0
-    while not done[0] and is_instance_valid(overlay):
-        await get_tree().create_timer(0.22,true,false,true).timeout; elapsed+=0.22
-        _tactical_combat_step(dep,edep)
-        if randf()<0.55: field.hit(ZONES.pick_random())
-        if elapsed>0.8:
-            for key in TACTICAL_KEYS:
-                if float(ereserve[key])>0.0 and randf()<0.22:
-                    var z:String=ZONES.pick_random(); var send:=float(ereserve[key])*randf_range(0.04,0.10); ereserve[key]-=send; edep[z][key]=float(edep[z][key])+send
-        field.forces=reserve; field.enemy=_totals(ereserve,edep); field.queue_redraw()
-        if elapsed>=60.0:done[0]=true
+func _open_attack_dialog(target:String)->void:
+    if target==player_id or _are_allies(player_id,target):return
+    _start_tactical_battle(player_id,target)
+
+func _start_tactical_battle(attacker_id:String,defender_id:String)->void:
+    if tactical_active:return
+    tactical_active=true;var old_pause:=paused;paused=true
+    var ps:=player_id;var es:=defender_id if attacker_id==player_id else attacker_id
+    var p:Dictionary=countries[ps];var e:Dictionary=countries[es]
+    var our_start:=float(p.army)+float(p.air)+float(p.navy)+float(p.def);var enemy_start:=float(e.army)+float(e.air)+float(e.navy)+float(e.def)
+    var our_reserve:=[our_start];var enemy_reserve:=[enemy_start];var our_missiles:=[float(p.missile)];var enemy_missiles:=[float(e.missile)];var our_field:=[0.0];var enemy_field:=[0.0]
+    var overlay:=ColorRect.new();overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);overlay.color=Color("071922");overlay.z_index=800;overlay.mouse_filter=Control.MOUSE_FILTER_STOP;add_child(overlay)
+    var root:=VBoxContainer.new();root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);root.offset_left=8;root.offset_right=-8;root.offset_top=8;root.offset_bottom=-8;overlay.add_child(root)
+    var title:=Label.new();title.text="%s   ⚔   %s"%[p.name,e.name];title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;title.add_theme_font_size_override("font_size",22);root.add_child(title)
+    var hint:=Label.new();hint.text="Тяни ВОЙСКА или РАКЕТЫ в центр. Дальность свайпа: 25% / 50% / 100%.";hint.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;root.add_child(hint)
+    var field:=BattleField.new();field.size_flags_vertical=Control.SIZE_EXPAND_FILL;field.custom_minimum_size=Vector2(700,440);root.add_child(field)
+    field.our_flag="🇷🇺";field.enemy_flag="🏳️";field.our_reserve=our_reserve[0];field.enemy_reserve=enemy_reserve[0];field.our_missiles=our_missiles[0];field.enemy_missiles=enemy_missiles[0]
+    field.send_troops.connect(func(share:float):var n:=our_reserve[0]*share;if n>0:our_reserve[0]-=n;our_field[0]+=n;field.launch("troops"))
+    field.send_missiles.connect(func(share:float):var n:=maxf(1.0,our_missiles[0]*share);n=minf(n,our_missiles[0]);if n>0:our_missiles[0]-=n;enemy_field[0]=maxf(0.0,enemy_field[0]-n*8.0);field.launch("missiles");field.explode())
+    var status:=Label.new();status.text="Поле нейтрально. Вводи силы сам - предварительного выбора армии больше нет.";status.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;root.add_child(status)
+    var retreat:=Button.new();retreat.text="ОТСТУПИТЬ";retreat.custom_minimum_size.y=58;root.add_child(retreat)
+    var retreating:=[false];retreat.pressed.connect(func():retreating[0]=true)
+    var ai_clock:=0.0
+    while not retreating[0] and is_instance_valid(overlay):
+        await get_tree().create_timer(0.20,true,false,true).timeout;ai_clock+=0.20
+        if ai_clock>=0.8:
+            ai_clock=0.0
+            if enemy_reserve[0]>0:
+                var n:=minf(enemy_reserve[0],maxf(enemy_start*randf_range(0.025,0.07),100.0));enemy_reserve[0]-=n;enemy_field[0]+=n;field.launch("troops",true)
+            if enemy_missiles[0]>0 and our_field[0]>0 and randf()<0.22:
+                var m:=minf(enemy_missiles[0],maxf(1.0,float(e.missile)*0.02));enemy_missiles[0]-=m;our_field[0]=maxf(0.0,our_field[0]-m*8.0);field.launch("missiles",true);field.explode()
+        if our_field[0]>0 and enemy_field[0]>0:
+            var op:=our_field[0];var ep:=enemy_field[0];our_field[0]=maxf(0.0,op-ep*randf_range(0.0018,0.0035));enemy_field[0]=maxf(0.0,ep-op*randf_range(0.0018,0.0035));if randf()<0.45:field.explode()
+        field.our_reserve=our_reserve[0];field.enemy_reserve=enemy_reserve[0];field.our_missiles=our_missiles[0];field.enemy_missiles=enemy_missiles[0];field.our_field=our_field[0];field.enemy_field=enemy_field[0];field.queue_redraw()
+        if enemy_reserve[0]<=0 and enemy_field[0]<=0:break
+        if our_reserve[0]<=0 and our_field[0]<=0:break
+    var did_retreat:=retreating[0]
     if is_instance_valid(overlay):overlay.queue_free()
-    _finish_tactical_battle(ps,es,attacker_id,defender_id,initial,einitial,reserve,ereserve,dep,edep); paused=old_paused; tactical_active=false
+    # Player losses are permanent. On retreat, all surviving enemy troops return to its reserve;
+    # only enemy troops actually killed during combat remain lost.
+    var our_survivors:=our_reserve[0]+our_field[0];var enemy_survivors:=enemy_reserve[0]+enemy_field[0]
+    var our_loss:=maxf(0.0,our_start-our_survivors);var enemy_loss:=maxf(0.0,enemy_start-enemy_survivors)
+    _apply_combined_troop_loss(p,our_loss);_apply_combined_troop_loss(e,enemy_loss)
+    p.missile=our_missiles[0];e.missile=enemy_missiles[0]
+    p.population=maxf(0.1,float(p.population)-our_loss/1000000.0);e.population=maxf(0.1,float(e.population)-enemy_loss/1000000.0)
+    p.war_fatigue=minf(100.0,float(p.war_fatigue)+5.0);e.war_fatigue=minf(100.0,float(e.war_fatigue)+5.0);p.relations[es]=-100;e.relations[ps]=-100
+    if did_retreat:_push_news("%s отступает из боя с %s. Потери сторон сохранены; уцелевшие силы противника вернулись из поля боя."%[p.name,e.name])
+    else:
+        var winner:=ps if our_survivors>enemy_survivors else es;_push_news("БИТВА: %s - %s: победа %s."%[countries[attacker_id].name,countries[defender_id].name,countries[winner].name])
+    _mark_activity(attacker_id,ACTIVITY_WAR,6);_mark_activity(defender_id,ACTIVITY_WAR,6);paused=old_pause;tactical_active=false;_refresh_all()
 
-func _totals(reserve:Dictionary,dep:Dictionary)->Dictionary:
-    var out:={}
-    for key in TACTICAL_KEYS:
-        out[key]=float(reserve[key])
-        for z in ZONES: out[key]+=float(dep[z][key])
-    return out
-
-func _tactical_combat_step(ours:Dictionary,theirs:Dictionary)->void:
-    for z in ZONES:
-        var a:Dictionary=ours[z]; var d:Dictionary=theirs[z]
-        for key in ["army","air","navy"]:
-            var av:=float(a[key]); var dv:=float(d[key])
-            if av>0.0 and dv>0.0:
-                a[key]=maxf(0.0,av-minf(av,dv*randf_range(0.003,0.009))); d[key]=maxf(0.0,dv-minf(dv,av*randf_range(0.003,0.009)))
-        if float(a.def)>0 and float(d.air)>0:d.air=maxf(0,float(d.air)-float(a.def)*randf_range(0.002,0.006))
-        if float(d.def)>0 and float(a.air)>0:a.air=maxf(0,float(a.air)-float(d.def)*randf_range(0.002,0.006))
-        d.army=maxf(0,float(d.army)-float(a.air)*0.0015-float(a.navy)*0.001); a.army=maxf(0,float(a.army)-float(d.air)*0.0015-float(d.navy)*0.001)
-        var amp:=maxf(0,float(a.missile)-float(d.def)*0.012); var dmp:=maxf(0,float(d.missile)-float(a.def)*0.012)
-        if amp>0:d.army=maxf(0,float(d.army)-amp*0.8);d.air=maxf(0,float(d.air)-amp*0.18);d.navy=maxf(0,float(d.navy)-amp*0.12);a.missile=maxf(0,float(a.missile)-amp*0.02)
-        if dmp>0:a.army=maxf(0,float(a.army)-dmp*0.8);a.air=maxf(0,float(a.air)-dmp*0.18);a.navy=maxf(0,float(a.navy)-dmp*0.12);d.missile=maxf(0,float(d.missile)-dmp*0.02)
-        if float(a.army)>0:d.def=maxf(0,float(d.def)-float(a.army)*0.0007)
-        if float(d.army)>0:a.def=maxf(0,float(a.def)-float(d.army)*0.0007)
-
-func _finish_tactical_battle(ps:String,es:String,attacker_id:String,defender_id:String,initial:Dictionary,einitial:Dictionary,reserve:Dictionary,ereserve:Dictionary,dep:Dictionary,edep:Dictionary)->void:
-    var fp:=_totals(reserve,dep); var fe:=_totals(ereserve,edep)
-    for key in TACTICAL_KEYS:
-        var pl:=maxf(0,float(initial[key])-float(fp[key])); var el:=maxf(0,float(einitial[key])-float(fe[key])); countries[ps][key]=maxf(0,float(countries[ps][key])-pl); countries[es][key]=maxf(0,float(countries[es][key])-el)
-        if key!="missile":countries[ps].population=maxf(0.1,float(countries[ps].population)-pl/1000000.0);countries[es].population=maxf(0.1,float(countries[es].population)-el/1000000.0)
-    var pt:=0.0;var et:=0.0
-    for key in TACTICAL_KEYS:pt+=float(fp[key]);et+=float(fe[key])
-    var winner:=ps if pt>=et else es
-    countries[ps].war_fatigue=minf(100,float(countries[ps].war_fatigue)+5);countries[es].war_fatigue=minf(100,float(countries[es].war_fatigue)+5);countries[ps].relations[es]=-100;countries[es].relations[ps]=-100
-    _push_news("БИТВА: %s - %s: победа %s (интерактивный бой)."%[countries[attacker_id].name,countries[defender_id].name,countries[winner].name]);_mark_activity(attacker_id,ACTIVITY_WAR,6);_mark_activity(defender_id,ACTIVITY_WAR,6);_refresh_all()
+func _apply_combined_troop_loss(c:Dictionary,loss:float)->void:
+    var total:=float(c.army)+float(c.air)+float(c.navy)+float(c.def)
+    if total<=0:return
+    var ratio:=clampf(loss/total,0.0,1.0)
+    for key in ["army","air","navy","def"]:c[key]=maxf(0.0,float(c[key])*(1.0-ratio))

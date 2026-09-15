@@ -8,11 +8,13 @@ const LAT_MAX := 76.0
 const ACTIVE_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP"]
 const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония"}
 const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
-const START_ARMY := 1000.0
+const START_ARMY := 100.0
 const ACTIVE_GROWTH := 1.0
 const NEUTRAL_GROWTH := 0.5
 const ARMY_SPEED := 110.0
 const COLLISION_RADIUS := 20.0
+const SOLDIER_RADIUS := 3.2
+const SOLDIER_SPACING := 8.0
 
 var player_country := ""
 var territories: Dictionary = {}
@@ -25,7 +27,6 @@ var zoom := 1.0
 var pan := Vector2.ZERO
 var touches: Dictionary = {}
 var drag_source := ""
-var drag_moved := false
 var pinch_distance := 0.0
 var pinch_center := Vector2.ZERO
 var ai_clock := 0.0
@@ -118,6 +119,21 @@ func _owner_color(owner: String) -> Color:
     var colors := {"RU":Color(0.18,0.38,0.78),"UA":Color(0.10,0.52,0.86),"PL":Color(0.85,0.25,0.35),"FR":Color(0.18,0.30,0.72),"DE":Color(0.18,0.18,0.18),"GB":Color(0.25,0.20,0.62),"CN":Color(0.82,0.10,0.10),"IN":Color(0.92,0.50,0.12),"IR":Color(0.10,0.55,0.25),"JP":Color(0.92,0.92,0.92)}
     return colors.get(owner, Color(0.34,0.36,0.38))
 
+func _draw_soldiers(center: Vector2, amount: int, owner: String, direction: Vector2) -> void:
+    if amount <= 0: return
+    var cols := int(ceil(sqrt(float(amount))))
+    var rows := int(ceil(float(amount)/float(cols)))
+    var side := Vector2(-direction.y,direction.x)
+    var back := -direction
+    var start_side := -float(cols-1)*SOLDIER_SPACING*0.5
+    var start_back := -float(rows-1)*SOLDIER_SPACING*0.5
+    for i in range(amount):
+        var col := i % cols
+        var row := i / cols
+        var p := center + side*(start_side+float(col)*SOLDIER_SPACING) + back*(start_back+float(row)*SOLDIER_SPACING)
+        draw_circle(p,SOLDIER_RADIUS,_owner_color(owner))
+        draw_circle(p,SOLDIER_RADIUS,Color.WHITE,false,1.0)
+
 func _draw() -> void:
     draw_rect(Rect2(Vector2.ZERO,size),Color(0.035,0.10,0.16))
     hit_polygons.clear(); feature_centers.clear()
@@ -152,11 +168,10 @@ func _draw() -> void:
         draw_string(ThemeDB.fallback_font,c-Vector2(60,-9),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
     for a in armies:
         var pos: Vector2 = a.pos
-        draw_circle(pos,7.0,_owner_color(str(a.owner)))
-        draw_circle(pos,7.0,Color.WHITE,false,2.0)
-        var txt := str(int(float(a.amount)))
-        draw_string_outline(ThemeDB.fallback_font,pos+Vector2(10,5),txt,HORIZONTAL_ALIGNMENT_LEFT,-1,13,3,Color.BLACK)
-        draw_string(ThemeDB.fallback_font,pos+Vector2(10,5),txt,HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color.WHITE)
+        var target := str(a.target)
+        var direction := Vector2.RIGHT
+        if feature_centers.has(target): direction=(Vector2(feature_centers[target])-pos).normalized()
+        _draw_soldiers(pos,int(float(a.amount)),str(a.owner),direction)
 
 func _hit(pos: Vector2) -> String:
     for iso in hit_polygons.keys():
@@ -238,8 +253,7 @@ func _gui_input(event: InputEvent) -> void:
     if event is InputEventScreenTouch:
         if event.pressed:
             touches[event.index]=event.position
-            if touches.size()==1:
-                drag_source=_hit(event.position); drag_moved=false
+            if touches.size()==1: drag_source=_hit(event.position)
             elif touches.size()==2:
                 drag_source=""
                 var pts:=touches.values(); pinch_distance=Vector2(pts[0]).distance_to(Vector2(pts[1])); pinch_center=(Vector2(pts[0])+Vector2(pts[1]))*0.5
@@ -262,5 +276,4 @@ func _gui_input(event: InputEvent) -> void:
             pinch_distance=new_dist; pinch_center=new_center; queue_redraw()
         elif touches.size()==1:
             if drag_source=="": pan+=event.relative; queue_redraw()
-            else: drag_moved=true
         accept_event()

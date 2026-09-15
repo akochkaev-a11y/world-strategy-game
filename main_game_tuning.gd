@@ -1,7 +1,7 @@
 extends "res://main_two_stage_war.gd"
 
 const ECONOMIC_TICK_SECONDS := 30.0
-const BATTLE_TIME_SCALE := 0.65
+const BATTLE_TIME_SCALE := 0.13
 var day_accum: float = 0.0
 
 func _ready() -> void:
@@ -30,14 +30,10 @@ func _add_x100_test_speed() -> void:
 func _process(delta: float) -> void:
     if paused:
         return
-
-    # Game calendar: at x1 one real second equals one game day.
     day_accum += delta * speed
     while day_accum >= 1.0:
         day_accum -= 1.0
         _demography_day_tick()
-
-    # Existing timings are unchanged; x100 scales them through the same speed variable.
     minute_accum += delta * speed
     bot_accum += delta * speed
     while minute_accum >= ECONOMIC_TICK_SECONDS:
@@ -60,7 +56,6 @@ func _show_fullscreen_battle(attacker_id: String, defender_id: String, winner: S
     super._show_fullscreen_battle(attacker_id, defender_id, winner, before_a, before_d, alosses, dlosses, apeop, dpeop,acost,dcost,transfer,a_financial,d_financial)
     await get_tree().process_frame
     _compact_battle_overlay()
-
     while _battle_overlay_exists():
         await get_tree().process_frame
     Engine.time_scale = old_scale
@@ -79,7 +74,6 @@ func _compact_battle_overlay() -> void:
             break
     if overlay == null:
         return
-
     var buttons: HBoxContainer = null
     var stack: Array[Node] = [overlay]
     while not stack.is_empty():
@@ -93,7 +87,6 @@ func _compact_battle_overlay() -> void:
                     break
         if buttons != null:
             break
-
     if buttons != null and buttons.get_parent() != overlay:
         var old_parent := buttons.get_parent()
         old_parent.remove_child(buttons)
@@ -106,7 +99,6 @@ func _compact_battle_overlay() -> void:
         buttons.offset_right = -12.0
         buttons.offset_top = -62.0
         buttons.offset_bottom = -8.0
-
     stack = [overlay]
     while not stack.is_empty():
         var node: Node = stack.pop_back()

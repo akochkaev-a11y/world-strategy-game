@@ -32,7 +32,7 @@ func _ensure_population_data() -> void:
         if not c.has("war_cooldown"):
             c["war_cooldown"] = 0
         if not c.has("protected_treasury"):
-            c["protected_treasury"] = float(c.treasury) * BOT_SAVINGS_SHARE if id != player_id else 0.0
+            c["protected_treasury"] = 0.0
         if not c.has("economic_recovery"):
             c["economic_recovery"] = false
 
@@ -87,10 +87,8 @@ func _bot_needs_recovery(c: Dictionary) -> bool:
     return _raw_net_income(c) <= effective * BOT_RECOVERY_MARGIN
 
 func _bot_demobilize_step(c: Dictionary) -> void:
-    # Reduce personnel gradually, preserving the army's composition.
     for key in ["army", "air", "navy", "def"]:
         c[key] = maxf(0.0, float(c.get(key, 0.0)) * (1.0 - BOT_DEMOBILIZE_SHARE))
-    # If personnel cuts are not enough, reduce costly missile stock as well.
     if _raw_net_income(c) <= 0.0:
         c.missile = maxf(0.0, float(c.get("missile", 0.0)) * (1.0 - BOT_DEMOBILIZE_SHARE))
 

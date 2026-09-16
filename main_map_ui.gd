@@ -12,6 +12,9 @@ var military_balance: Control
 var army_clock := 0.0
 var started := false
 var chooser: PanelContainer
+var camera_touches: Dictionary = {}
+var camera_last_midpoint := Vector2.ZERO
+var camera_last_distance := 0.0
 
 func _ready() -> void:
     _show_country_chooser()
@@ -90,3 +93,82 @@ func _process(delta: float) -> void:
         army_clock -= 1.0
         if world_map and is_instance_valid(world_map):
             world_map.grow_armies()
+
+func _input(event: InputEvent) -> void:
+    if not started or not world_map or not is_instance_valid(world_map):
+        return
+    if event is InputEventScreenTouch:
+        if event.pressed:
+            camera_touches[event.index] = event.position
+            if camera_touches.size() == 2:
+                _begin_camera_gesture()
+                world_map.drag_source = ""
+                world_map.touches.clear()
+                get_viewport().set_input_as_handled()
+        else:
+            if camera_touches.has(event.index):
+                camera_touches.erase(event.index)
+            if camera_touches.size() < 2:
+                camera_last_distance = 0.0
+                camera_last_midpoint = Vector2.ZERO
+            if camera_touches.size() == 1:
+                world_map.drag_source = ""
+                world_map.touches.clear()
+    elif event is InputEventScreenDrag:
+        camera_touches[event.index] = event.position
+        if camera_touches.size() == 2:
+            _update_camera_gesture()
+            world_map.drag_source = ""
+            world_map.touches.clear()
+            get_viewport().set_input_as_handled()
+
+func _begin_camera_gesture() -> void:
+    var vals:Array = camera_touches.values()
+    if vals.size() != 2:
+        return
+    var a:Vector2 = Vector2(vals[0])
+    var b:Vector2 = Vector2(vals[1])
+    camera_last_midpoint = (a+b)*0.5
+    camera_last_distance = a.distance_to(b)
+
+func _update_camera_gesture() -> void:
+    var vals:Array = camera_touches.values()
+    if vals.size() != 2:
+        return
+    var a:Vector2 = Vector2(vals[0])
+    var b:Vector2 = Vector2(vals[1])
+    var midpoint:Vector2 = (a+b)*0.5
+    var distance:float = a.distance_to(b)
+    if camera_last_distance <= 0.0:
+        camera_last_midpoint = midpoint
+        camera_last_distance = distance
+        return
+
+    var old_zoom:float = float(world_map.zoom)
+    var new_zoom:float = clampf(old_zoom * distance / camera_last_distance,1.0,2.8)
+    var pan_delta:Vector2 = midpoint-camera_last_midpoint
+    world_map.zoom = new_zoom
+
+    if new_zoom <= 1.001:
+        world_map.zoom = 1.0
+        world_map.pan = Vector2.ZERO
+    else:
+        var current_pan:Vector2 = Vector2(world_map.pan)
+        var focus_from_center:Vector2 = camera_last_midpoint-world_map.size*0.5
+        if old_zoom > 0.0 and not is_equal_approx(new_zoom,old_zoom):
+            current_pan -= focus_from_center*(new_zoom/old_zoom-1.0)
+        current_pan += pan_delta
+        world_map.pan = _clamp_camera_pan(current_pan,new_zoom)
+
+    camera_last_midpoint = midpoint
+    camera_last_distance = distance
+    world_map.queue_redraw()
+
+func _clamp_camera_pan(value:Vector2,current_zoom:float) -> Vector2:
+    if current_zoom <= 1.0:
+        return Vector2.ZERO
+    var half_extra:Vector2 = world_map.size*(current_zoom-1.0)*0.5
+    var margin:=Vector2(48.0,48.0)
+    var limit_x:float = maxf(0.0,half_extra.x-margin.x)
+    var limit_y:float = maxf(0.0,half_extra.y-margin.y)
+    return Vector2(clampf(value.x,-limit_x,limit_x),clampf(value.y,-limit_y,limit_y))

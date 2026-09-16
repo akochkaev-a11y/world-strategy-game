@@ -43,7 +43,13 @@ func _refresh() -> void:
         var moving_owner := str(a.owner)
         if moving_owner != "NEUTRAL":
             totals[moving_owner] = int(totals.get(moving_owner, 0)) + int(float(a.amount))
-    rows.sort_custom(func(a,b): return int(a.army) > int(b.army))
+    rows.sort_custom(func(a,b):
+        var total_a := int(totals.get(str(a.owner), 0))
+        var total_b := int(totals.get(str(b.owner), 0))
+        if total_a == total_b:
+            return int(a.army) > int(b.army)
+        return total_a > total_b
+    )
     queue_redraw()
 
 func _draw() -> void:

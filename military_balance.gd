@@ -13,9 +13,9 @@ func setup(map: Control, selected: String) -> void:
     world_map = map
     player_country = selected
     mouse_filter = Control.MOUSE_FILTER_IGNORE
-    set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-    offset_left = -285.0
-    offset_right = -12.0
+    set_anchors_preset(Control.PRESET_LEFT_WIDE)
+    offset_left = 12.0
+    offset_right = 285.0
     offset_top = 14.0
     offset_bottom = -14.0
     _refresh()

@@ -74,34 +74,12 @@ func _bounds(poly:PackedVector2Array)->Rect2:
  for p in poly:a.x=minf(a.x,p.x);a.y=minf(a.y,p.y);b.x=maxf(b.x,p.x);b.y=maxf(b.y,p.y)
  return Rect2(a,b-a)
 func _owner_color(owner:String)->Color:
- var c:={"RU":Color(0.18,0.42,0.92),"UA":Color(0.12,0.62,0.96),"PL":Color(0.92,0.25,0.38),"FR":Color(0.22,0.34,0.82),"DE":Color(0.22,0.22,0.24),"GB":Color(0.34,0.22,0.72),"CN":Color(0.90,0.12,0.12),"IN":Color(0.96,0.52,0.10),"IR":Color(0.10,0.62,0.30),"JP":Color(0.90,0.90,0.94)};return c.get(owner,Color(0.34,0.37,0.40))
-func _flag_colors(owner:String)->Array:
- match owner:
-  "RU":return [Color.WHITE,Color(0.08,0.32,0.78),Color(0.82,0.10,0.16)]
-  "UA":return [Color(0.04,0.42,0.78),Color(1.0,0.82,0.05)]
-  "PL":return [Color.WHITE,Color(0.86,0.08,0.22)]
-  "DE":return [Color(0.08,0.08,0.08),Color(0.82,0.06,0.08),Color(0.96,0.70,0.05)]
-  "FR":return [Color(0.05,0.22,0.62),Color.WHITE,Color(0.86,0.08,0.16)]
-  "GB":return [Color(0.08,0.20,0.55),Color.WHITE,Color(0.78,0.06,0.12)]
-  "CN":return [Color(0.88,0.05,0.08),Color(1.0,0.82,0.05)]
-  "IN":return [Color(1.0,0.50,0.08),Color.WHITE,Color(0.05,0.55,0.24)]
-  "IR":return [Color(0.04,0.55,0.22),Color.WHITE,Color(0.82,0.08,0.12)]
-  "JP":return [Color.WHITE,Color(0.82,0.06,0.16)]
- return [_owner_color(owner)]
-func _draw_flag_fill(poly:PackedVector2Array,owner:String)->void:
- if owner=="NEUTRAL":draw_colored_polygon(poly,_owner_color(owner));return
- var cols:Array=_flag_colors(owner);var bb:=_bounds(poly);draw_colored_polygon(poly,_owner_color(owner));var horizontal:=owner!="FR"
- for i in range(cols.size()):
-  var stripe:=PackedVector2Array();var lo:float=float(i)/float(cols.size());var hi:float=float(i+1)/float(cols.size())
-  for p in poly:
-   var ratio:float=(p.y-bb.position.y)/maxf(bb.size.y,1.0) if horizontal else (p.x-bb.position.x)/maxf(bb.size.x,1.0)
-   if ratio>=lo and ratio<=hi:stripe.append(p)
-  if stripe.size()>=3:draw_colored_polygon(stripe,cols[i])
+ var c:={"RU":Color(0.18,0.42,0.92),"UA":Color(0.12,0.62,0.96),"PL":Color(0.92,0.25,0.38),"FR":Color(0.22,0.34,0.82),"DE":Color(0.22,0.22,0.24),"GB":Color(0.34,0.22,0.72),"CN":Color(0.90,0.12,0.12),"IN":Color(0.96,0.52,0.10),"IR":Color(0.10,0.62,0.30),"JP":Color(0.90,0.90,0.94)};return c.get(owner,Color(0.30,0.33,0.36))
 func _draw_soldiers(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
  var n:int=mini(amount,MAX_DRAWN_SOLDIERS);var side:=Vector2(-direction.y,direction.x)
  for i in range(n):
-  var row:int=i/4;var col:int=i%4;var wave:=sin(anim_time*6.0+float(i)*1.7)*1.8;var p:=center-direction*((float(row)-float(n/8))*7.0)+side*((float(col)-1.5)*7.0+wave);draw_circle(p,4.0,Color(0.02,0.03,0.04,0.8));draw_circle(p,3.0,_owner_color(owner))
- draw_circle(center+Vector2(0,-24),14.0,Color(0.02,0.05,0.08,0.92));draw_string(ThemeDB.fallback_font,center+Vector2(-18,-19),str(amount),HORIZONTAL_ALIGNMENT_CENTER,36,12,Color.WHITE)
+  var row:int=i/4;var col:int=i%4;var wave:=sin(anim_time*6.0+float(i)*1.7)*2.4;var stagger:=sin(float(i)*2.13)*2.2;var p:=center-direction*((float(row)-float(n/8))*7.5+stagger)+side*((float(col)-1.5)*7.5+wave);draw_circle(p,4.5,Color(0.02,0.03,0.04,0.72));draw_circle(p,3.0,_owner_color(owner));draw_circle(p-Vector2(0.8,0.8),0.8,Color(1,1,1,0.65))
+ draw_circle(center+Vector2(0,-27),15.0,Color(0.02,0.05,0.08,0.94));draw_string(ThemeDB.fallback_font,center+Vector2(-19,-22),str(amount),HORIZONTAL_ALIGNMENT_CENTER,38,12,Color.WHITE)
 func _draw()->void:
  draw_rect(Rect2(Vector2.ZERO,size),Color(0.025,0.075,0.12));hit_polygons.clear();feature_centers.clear();var best:Dictionary={}
  for feature in map_features:
@@ -109,15 +87,20 @@ func _draw()->void:
   var polys:Array=[]
   for ring in _rings(feature):
    var p:=_poly(ring);if p.size()<3:continue
-   var owner:=str(territories[iso].owner);_draw_flag_fill(p,owner);var border:=Color(0.98,0.83,0.28) if owner==player_country else Color(0.76,0.82,0.86);var width:float=3.0+sin(anim_time*2.5)*0.7 if owner==player_country else 1.2
+   var owner:=str(territories[iso].owner);var fill:=_owner_color(owner);if owner==player_country:fill=fill.lightened(0.06);draw_colored_polygon(p,fill)
+   var border:=Color(0.98,0.83,0.28) if owner==player_country else Color(0.68,0.75,0.80);var width:float=3.0+sin(anim_time*2.5)*0.7 if owner==player_country else 1.15
    for i in range(p.size()):draw_line(p[i],p[(i+1)%p.size()],border,width,true)
    var bb:=_bounds(p);var area:=bb.size.x*bb.size.y;if area>float(best.get(iso,0.0)):best[iso]=area;feature_centers[iso]=bb.get_center()
    polys.append(p)
   if not polys.is_empty():hit_polygons[iso]=polys
  for iso in feature_centers.keys():
-  var t:Dictionary=territories[iso];var c:Vector2=feature_centers[iso];var owner:=str(t.owner);var title:=str(NAMES.get(iso,"")) if ACTIVE_IDS.has(iso) else "";var flag:=str(FLAGS.get(owner,"")) if owner!="NEUTRAL" else "";var line1:=(flag+" "+title).strip_edges()
-  if line1!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(70,10),line1,HORIZONTAL_ALIGNMENT_CENTER,140,15,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(70,10),line1,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color.WHITE)
-  var count:=str(int(float(t.army)));draw_string_outline(ThemeDB.fallback_font,c-Vector2(60,-9),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(60,-9),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
+  var t:Dictionary=territories[iso];var c:Vector2=feature_centers[iso];var owner:=str(t.owner);var title:=str(NAMES.get(iso,"")) if ACTIVE_IDS.has(iso) else "";var flag:=str(FLAGS.get(owner,"")) if owner!="NEUTRAL" else ""
+  if flag!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(50,45),flag,HORIZONTAL_ALIGNMENT_CENTER,100,56,6,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(50,45),flag,HORIZONTAL_ALIGNMENT_CENTER,100,56,Color.WHITE)
+  if title!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(70,-4),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(70,-4),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color.WHITE)
+  var count:=str(int(float(t.army)));draw_string_outline(ThemeDB.fallback_font,c-Vector2(60,-22),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(60,-22),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
+ if drag_source!="" and feature_centers.has(drag_source) and touches.size()==1:
+  var finger:Vector2=Vector2(touches.values()[0]);var source_pos:Vector2=Vector2(feature_centers[drag_source]);draw_line(source_pos,finger,Color(1,1,1,0.42),2.0,true);draw_circle(source_pos,13.0+sin(anim_time*5.0)*2.0,Color(1,0.83,0.28,0.55),false,2.5)
+  var hover:=_hit(finger);if hover!="" and feature_centers.has(hover):draw_circle(Vector2(feature_centers[hover]),19.0+sin(anim_time*5.0)*2.0,Color(1,1,1,0.48),false,2.5)
  for a in armies:
   var pos:Vector2=a.pos;var target:=str(a.target);var dir:=Vector2.RIGHT;if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized();_draw_soldiers(pos,int(float(a.amount)),str(a.owner),dir)
 func _hit(pos:Vector2)->String:

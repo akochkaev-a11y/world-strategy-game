@@ -26,21 +26,43 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Download real country boundaries
+      - name: Download and validate country boundaries
         shell: bash
         run: |
           set -e
           URL="https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
-          if command -v curl >/dev/null 2>&1; then
-            curl -LfsS "$URL" -o eurasia_countries.json
-          elif command -v wget >/dev/null 2>&1; then
-            wget -qO eurasia_countries.json "$URL"
-          else
-            echo "Neither curl nor wget is available in the Godot container."
-            exit 1
-          fi
+          curl -LfsS "$URL" -o /tmp/all_countries.geojson
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          wanted = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM"]
+          wanted_set = set(wanted)
+          a3 = {"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
+          data = json.loads(Path('/tmp/all_countries.geojson').read_text())
+          selected = {}
+          for feature in data.get('features', []):
+              p = feature.get('properties') or {}
+              iso = p.get('ISO_A2')
+              if not iso or iso == '-99':
+                  iso = p.get('ISO_A2_EH')
+              if not iso or iso == '-99':
+                  iso = a3.get(p.get('ADM0_A3'), '')
+              geom = feature.get('geometry') or {}
+              if iso in wanted_set and geom.get('type') in ('Polygon','MultiPolygon'):
+                  if iso in selected:
+                      raise SystemExit(f'duplicate playable country geometry: {iso}')
+                  selected[iso] = feature
+          missing = wanted_set - set(selected)
+          extra = set(selected) - wanted_set
+          if missing or extra or len(selected) != 30:
+              raise SystemExit(f'geometry validation failed: count={len(selected)} missing={sorted(missing)} extra={sorted(extra)}')
+          out = {'type':'FeatureCollection','features':[selected[iso] for iso in wanted]}
+          Path('eurasia_countries.json').write_text(json.dumps(out, separators=(',',':')))
+          print('Validated playable geometries:', ','.join(wanted))
+          print('Playable geometry count:', len(out['features']))
+          PY
           test -s eurasia_countries.json
-          echo "Natural Earth boundaries: $(wc -c < eurasia_countries.json) bytes"
 
       - name: Setup Godot
         shell: bash
@@ -74,23 +96,16 @@ jobs:
           SDKMANAGER="$(find /usr/lib/android-sdk -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses || true
-
-          # Godot's prebuilt Android export templates do not need an NDK/CMake
-          # download here. Installing only the SDK packages required for export
-          # avoids flaky large NDK downloads on GitHub runners.
           for attempt in 1 2 3; do
-            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-              "platform-tools" "build-tools;34.0.0" "platforms;android-34"; then
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" "build-tools;34.0.0" "platforms;android-34"; then
               break
             fi
             if [ "$attempt" -eq 3 ]; then
               echo "Android SDK package installation failed after 3 attempts."
               exit 1
             fi
-            echo "SDK download failed, retrying in 5 seconds..."
             sleep 5
           done
-
           test -x "$ANDROID_HOME/platform-tools/adb"
           test -d "$ANDROID_HOME/build-tools/34.0.0"
           test -d "$ANDROID_HOME/platforms/android-34"
@@ -100,9 +115,7 @@ jobs:
         run: |
           set -e
           if [ ! -f /root/debug.keystore ]; then
-            keytool -genkeypair -keystore /root/debug.keystore -storepass android \
-              -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA -keysize 2048 -validity 10000
+            keytool -genkeypair -keystore /root/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
           fi
           keytool -list -keystore /root/debug.keystore -storepass android -alias androiddebugkey >/dev/null
 

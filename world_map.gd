@@ -222,7 +222,7 @@ func _draw() -> void:
         if not polys.is_empty(): hit_polygons[iso]=polys
     for iso in feature_centers.keys(): _draw_marker(str(iso),Vector2(feature_centers[iso]))
     if drag_source!="" and feature_centers.has(drag_source):
-        var finger:=mouse_pos
+        var finger:Vector2=mouse_pos
         if touches.size()==1: finger=Vector2(touches.values()[0])
         var source:=Vector2(feature_centers[drag_source])
         var route:=_curve_points(source,finger)
@@ -244,7 +244,7 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false) -> void:
     if game_over or from_iso=="" or to_iso=="" or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso): return
     var src:Dictionary=territories[from_iso]
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country): return
-    var amount:=floor(float(src.army)*share)
+    var amount:float=floor(float(src.army)*share)
     if amount<1.0 or not feature_centers.has(from_iso): return
     src.army=float(src.army)-amount
     armies.append({"owner":str(src.owner),"amount":amount,"pos":Vector2(feature_centers[from_iso]),"target":to_iso})
@@ -336,7 +336,7 @@ func _gui_input(event:InputEvent) -> void:
                 var vals:=touches.values(); pinch_distance=Vector2(vals[0]).distance_to(Vector2(vals[1])); drag_source=""
         else:
             if touches.has(event.index):
-                var release_pos:=event.position
+                var release_pos:Vector2=event.position
                 if touches.size()==1 and drag_source!="": _send_army(drag_source,_hit(release_pos))
                 touches.erase(event.index)
                 if touches.is_empty(): drag_source=""

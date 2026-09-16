@@ -12,7 +12,6 @@ const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷",
 const START_ARMY := 100.0
 const ARMY_SPEED := 110.0
 const MAX_DRAWN_SOLDIERS := 42
-
 var player_country := ""
 var territories: Dictionary = {}
 var armies: Array[Dictionary] = []
@@ -30,43 +29,34 @@ var ai_clock := 0.0
 var anim_time := 0.0
 var game_over := false
 var game_started := false
-
-func setup(_data: Dictionary, selected: String) -> void:
- player_country=selected; _load_geojson(); _ensure_territories(); game_started=true; queue_redraw()
-func _ready()->void: mouse_filter=Control.MOUSE_FILTER_STOP
+func setup(_data:Dictionary,selected:String)->void:player_country=selected;_load_geojson();_ensure_territories();game_started=true;queue_redraw()
+func _ready()->void:mouse_filter=Control.MOUSE_FILTER_STOP
 func _feature_iso(props:Dictionary)->String:
- var iso:=str(props.get("ISO_A2",""))
- if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
+ var iso:=str(props.get("ISO_A2",""));if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
  if iso=="" or iso=="-99":
   var a3:=str(props.get("ADM0_A3",""));var m:={"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"};iso=str(m.get(a3,a3))
  return iso
 func _load_geojson()->void:
  if not map_features.is_empty() or not FileAccess.file_exists(GEOJSON_PATH):return
- var f:=FileAccess.open(GEOJSON_PATH,FileAccess.READ)
- if f==null:return
- var parsed=JSON.parse_string(f.get_as_text())
- if typeof(parsed)!=TYPE_DICTIONARY:return
+ var f:=FileAccess.open(GEOJSON_PATH,FileAccess.READ);if f==null:return
+ var parsed=JSON.parse_string(f.get_as_text());if typeof(parsed)!=TYPE_DICTIONARY:return
  for feature in parsed.get("features",[]):
   if PLAYABLE_IDS.has(_feature_iso(feature.get("properties",{}))):map_features.append(feature)
 func _ensure_territories()->void:
  for feature in map_features:
-  var iso:=_feature_iso(feature.get("properties",{}))
-  if iso=="" or territories.has(iso):continue
+  var iso:=_feature_iso(feature.get("properties",{}));if iso=="" or territories.has(iso):continue
   var active:=ACTIVE_IDS.has(iso);territories[iso]={"owner":iso if active else "NEUTRAL","army":START_ARMY};growth_fraction[iso]=0.0
 func grow_armies()->void:
  if game_over:return
  for iso in territories.keys():
-  var t:Dictionary=territories[iso];var rate:=1.0 if str(t.owner)!="NEUTRAL" else 0.5;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate
-  var whole:=int(floor(float(growth_fraction[iso])))
+  var t:Dictionary=territories[iso];var rate:float=1.0 if str(t.owner)!="NEUTRAL" else 0.5;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate;var whole:=int(floor(float(growth_fraction[iso])))
   if whole>0:t.army=float(t.army)+whole;growth_fraction[iso]=float(growth_fraction[iso])-whole
  queue_redraw()
 func _process(delta:float)->void:
  if game_over:return
- anim_time+=delta;_move_armies(delta);ai_clock+=delta
- if ai_clock>=4.0:ai_clock=0.0;_ai_attack()
+ anim_time+=delta;_move_armies(delta);ai_clock+=delta;if ai_clock>=4.0:ai_clock=0.0;_ai_attack()
 func _base_project(lon:float,lat:float)->Vector2:return Vector2((lon-LON_MIN)/(LON_MAX-LON_MIN)*size.x,(LAT_MAX-lat)/(LAT_MAX-LAT_MIN)*size.y)
-func _project(lon:float,lat:float)->Vector2:
- var c:=size*0.5;return c+(_base_project(lon,lat)-c)*zoom+pan
+func _project(lon:float,lat:float)->Vector2:var c:=size*0.5;return c+(_base_project(lon,lat)-c)*zoom+pan
 func _rings(feature:Dictionary)->Array:
  var g:Dictionary=feature.get("geometry",{});var coords:Array=g.get("coordinates",[]);var out:Array=[]
  if str(g.get("type",""))=="Polygon" and not coords.is_empty():out.append(coords[0])
@@ -100,35 +90,28 @@ func _flag_colors(owner:String)->Array:
  return [_owner_color(owner)]
 func _draw_flag_fill(poly:PackedVector2Array,owner:String)->void:
  if owner=="NEUTRAL":draw_colored_polygon(poly,_owner_color(owner));return
- var cols:=_flag_colors(owner);var bb:=_bounds(poly)
- draw_colored_polygon(poly,_owner_color(owner))
- var horizontal:=owner!="FR"
+ var cols:Array=_flag_colors(owner);var bb:=_bounds(poly);draw_colored_polygon(poly,_owner_color(owner));var horizontal:=owner!="FR"
  for i in range(cols.size()):
-  var stripe:=PackedVector2Array()
-  var lo:float=float(i)/float(cols.size());var hi:float=float(i+1)/float(cols.size())
+  var stripe:=PackedVector2Array();var lo:float=float(i)/float(cols.size());var hi:float=float(i+1)/float(cols.size())
   for p in poly:
    var ratio:float=(p.y-bb.position.y)/maxf(bb.size.y,1.0) if horizontal else (p.x-bb.position.x)/maxf(bb.size.x,1.0)
    if ratio>=lo and ratio<=hi:stripe.append(p)
   if stripe.size()>=3:draw_colored_polygon(stripe,cols[i])
 func _draw_soldiers(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
- var n:=mini(amount,MAX_DRAWN_SOLDIERS);var side:=Vector2(-direction.y,direction.x)
+ var n:int=mini(amount,MAX_DRAWN_SOLDIERS);var side:=Vector2(-direction.y,direction.x)
  for i in range(n):
-  var row:=i/4;var col:=i%4;var wave:=sin(anim_time*6.0+float(i)*1.7)*1.8;var p:=center-direction*((float(row)-float(n/8))*7.0)+side*((float(col)-1.5)*7.0+wave);draw_circle(p,4.0,Color(0.02,0.03,0.04,0.8));draw_circle(p,3.0,_owner_color(owner))
+  var row:int=i/4;var col:int=i%4;var wave:=sin(anim_time*6.0+float(i)*1.7)*1.8;var p:=center-direction*((float(row)-float(n/8))*7.0)+side*((float(col)-1.5)*7.0+wave);draw_circle(p,4.0,Color(0.02,0.03,0.04,0.8));draw_circle(p,3.0,_owner_color(owner))
  draw_circle(center+Vector2(0,-24),14.0,Color(0.02,0.05,0.08,0.92));draw_string(ThemeDB.fallback_font,center+Vector2(-18,-19),str(amount),HORIZONTAL_ALIGNMENT_CENTER,36,12,Color.WHITE)
 func _draw()->void:
  draw_rect(Rect2(Vector2.ZERO,size),Color(0.025,0.075,0.12));hit_polygons.clear();feature_centers.clear();var best:Dictionary={}
  for feature in map_features:
-  var iso:=_feature_iso(feature.get("properties",{}))
-  if not territories.has(iso):continue
+  var iso:=_feature_iso(feature.get("properties",{}));if not territories.has(iso):continue
   var polys:Array=[]
   for ring in _rings(feature):
-   var p:=_poly(ring)
-   if p.size()<3:continue
-   var owner:=str(territories[iso].owner);_draw_flag_fill(p,owner)
-   var border:=Color(0.98,0.83,0.28) if owner==player_country else Color(0.76,0.82,0.86);var width:=3.0+sin(anim_time*2.5)*0.7 if owner==player_country else 1.2
+   var p:=_poly(ring);if p.size()<3:continue
+   var owner:=str(territories[iso].owner);_draw_flag_fill(p,owner);var border:=Color(0.98,0.83,0.28) if owner==player_country else Color(0.76,0.82,0.86);var width:float=3.0+sin(anim_time*2.5)*0.7 if owner==player_country else 1.2
    for i in range(p.size()):draw_line(p[i],p[(i+1)%p.size()],border,width,true)
-   var bb:=_bounds(p);var area:=bb.size.x*bb.size.y
-   if area>float(best.get(iso,0.0)):best[iso]=area;feature_centers[iso]=bb.get_center()
+   var bb:=_bounds(p);var area:=bb.size.x*bb.size.y;if area>float(best.get(iso,0.0)):best[iso]=area;feature_centers[iso]=bb.get_center()
    polys.append(p)
   if not polys.is_empty():hit_polygons[iso]=polys
  for iso in feature_centers.keys():
@@ -136,9 +119,7 @@ func _draw()->void:
   if line1!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(70,10),line1,HORIZONTAL_ALIGNMENT_CENTER,140,15,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(70,10),line1,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color.WHITE)
   var count:=str(int(float(t.army)));draw_string_outline(ThemeDB.fallback_font,c-Vector2(60,-9),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(60,-9),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
  for a in armies:
-  var pos:Vector2=a.pos;var target:=str(a.target);var dir:=Vector2.RIGHT
-  if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized()
-  _draw_soldiers(pos,int(float(a.amount)),str(a.owner),dir)
+  var pos:Vector2=a.pos;var target:=str(a.target);var dir:=Vector2.RIGHT;if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized();_draw_soldiers(pos,int(float(a.amount)),str(a.owner),dir)
 func _hit(pos:Vector2)->String:
  for iso in hit_polygons.keys():
   for p in hit_polygons[iso]:
@@ -146,18 +127,14 @@ func _hit(pos:Vector2)->String:
  return ""
 func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
  if game_over or from_iso=="" or to_iso=="" or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso):return
- var src:Dictionary=territories[from_iso]
- if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
- var amount:=floor(float(src.army)*share)
- if amount<1 or not feature_centers.has(from_iso):return
+ var src:Dictionary=territories[from_iso];if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
+ var amount:float=floor(float(src.army)*share);if amount<1.0 or not feature_centers.has(from_iso):return
  src.army=float(src.army)-amount;armies.append({"owner":str(src.owner),"amount":amount,"pos":Vector2(feature_centers[from_iso]),"target":to_iso});queue_redraw()
 func _move_armies(delta:float)->void:
  for i in range(armies.size()-1,-1,-1):
   if i>=armies.size():continue
-  var a:Dictionary=armies[i];var target:=str(a.target)
-  if not feature_centers.has(target):continue
-  var dest:Vector2=feature_centers[target];var pos:Vector2=a.pos
-  if pos.distance_to(dest)<=ARMY_SPEED*delta:_arrive(i);continue
+  var a:Dictionary=armies[i];var target:=str(a.target);if not feature_centers.has(target):continue
+  var dest:Vector2=feature_centers[target];var pos:Vector2=a.pos;if pos.distance_to(dest)<=ARMY_SPEED*delta:_arrive(i);continue
   a.pos=pos.move_toward(dest,ARMY_SPEED*delta)
  _resolve_collisions();queue_redraw()
 func _resolve_collisions()->void:
@@ -173,8 +150,7 @@ func _resolve_collisions()->void:
   i+=1
 func _arrive(index:int)->void:
  if index<0 or index>=armies.size():return
- var a:Dictionary=armies[index];armies.remove_at(index);var target:=str(a.target)
- if not territories.has(target):return
+ var a:Dictionary=armies[index];armies.remove_at(index);var target:=str(a.target);if not territories.has(target):return
  var t:Dictionary=territories[target]
  if str(t.owner)==str(a.owner):t.army=float(t.army)+float(a.amount);return
  var attackers:=float(a.amount);var defenders:=float(t.army)
@@ -188,23 +164,20 @@ func _check_player_defeat()->void:
  game_over=true;armies.clear();_show_defeat()
 func _show_defeat()->void:
  var shade:=ColorRect.new();shade.color=Color(0.01,0.02,0.04,0.78);shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.mouse_filter=Control.MOUSE_FILTER_STOP;add_child(shade)
- var center:=CenterContainer.new();center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.add_child(center)
- var box:=VBoxContainer.new();box.custom_minimum_size=Vector2(520,260);box.alignment=BoxContainer.ALIGNMENT_CENTER;box.add_theme_constant_override("separation",22);center.add_child(box)
+ var center:=CenterContainer.new();center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.add_child(center);var box:=VBoxContainer.new();box.custom_minimum_size=Vector2(520,250);box.alignment=BoxContainer.ALIGNMENT_CENTER;center.add_child(box)
  var title:=Label.new();title.text="ВЫ ПРОИГРАЛИ";title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;title.add_theme_font_size_override("font_size",42);box.add_child(title)
  var sub:=Label.new();sub.text="Все территории вашей державы захвачены";sub.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;sub.add_theme_font_size_override("font_size",18);box.add_child(sub)
- var restart:=Button.new();restart.text="НАЧАТЬ ЗАНОВО";restart.custom_minimum_size=Vector2(320,62);restart.add_theme_font_size_override("font_size",20);restart.pressed.connect(_restart_game);box.add_child(restart)
-func _restart_game()->void:get_tree().reload_current_scene()
+ var button:=Button.new();button.text="НАЧАТЬ ЗАНОВО";button.custom_minimum_size=Vector2(320,60);button.add_theme_font_size_override("font_size",20);button.pressed.connect(_restart);box.add_child(button)
+func _restart()->void:get_tree().reload_current_scene()
 func _ai_attack()->void:
- if feature_centers.is_empty():return
  var sources:Array=[]
  for iso in territories.keys():
-  var t:Dictionary=territories[iso];var owner:=str(t.owner)
-  if owner!="NEUTRAL" and owner!=player_country and float(t.army)>=30.0:sources.append(str(iso))
+  var t:Dictionary=territories[iso];var owner:=str(t.owner);if owner!="NEUTRAL" and owner!=player_country and float(t.army)>=30.0:sources.append(str(iso))
  if sources.is_empty():return
- var source:=str(sources[randi()%sources.size()]);var owner:=str(territories[source].owner);var sa:=float(territories[source].army);var best_target:="";var best_score:=-1000000.0
+ var source:=str(sources[randi()%sources.size()]);var owner:=str(territories[source].owner);var sa:=float(territories[source].army);var best_target:="";var best_score:float=-1000000.0
  for iso in territories.keys():
   if str(territories[iso].owner)==owner or not feature_centers.has(iso):continue
-  var ta:=float(territories[iso].army);var dist:=Vector2(feature_centers[source]).distance_to(Vector2(feature_centers[iso]));var score:=(80.0 if str(territories[iso].owner)=="NEUTRAL" else 0.0)+maxf(0.0,sa-ta)*1.8+(55.0 if str(territories[iso].owner)==player_country and ta<sa*0.75 else 0.0)-dist*0.22
+  var ta:=float(territories[iso].army);var dist:=Vector2(feature_centers[source]).distance_to(Vector2(feature_centers[iso]));var score:float=(80.0 if str(territories[iso].owner)=="NEUTRAL" else 0.0)+maxf(0.0,sa-ta)*1.8+(55.0 if str(territories[iso].owner)==player_country and ta<sa*0.75 else 0.0)-dist*0.22
   if score>best_score:best_score=score;best_target=str(iso)
  if best_target!="" and (best_score>0.0 or sa>180.0):_send_army(source,best_target,0.5,true)
 func _gui_input(event:InputEvent)->void:
@@ -216,7 +189,7 @@ func _gui_input(event:InputEvent)->void:
    elif touches.size()==2:drag_source="";var pts:=touches.values();pinch_distance=Vector2(pts[0]).distance_to(Vector2(pts[1]));pinch_center=(Vector2(pts[0])+Vector2(pts[1]))*0.5
   else:
    if touches.size()==1 and drag_source!="":var target:=_hit(event.position);if target!="":_send_army(drag_source,target)
-   touches.erase(event.index);drag_source=""
+   touches.erase(event.index);if touches.size()<2:pinch_distance=0.0;drag_source=""
   accept_event()
  elif event is InputEventScreenDrag:
   if not touches.has(event.index):return

@@ -73,10 +73,9 @@ func _bounds(poly:PackedVector2Array)->Rect2:
  var a:=Vector2(INF,INF);var b:=Vector2(-INF,-INF)
  for p in poly:a.x=minf(a.x,p.x);a.y=minf(a.y,p.y);b.x=maxf(b.x,p.x);b.y=maxf(b.y,p.y)
  return Rect2(a,b-a)
-func _territory_color(iso:String,owner:String)->Color:
- if owner!="NEUTRAL":return _owner_color(owner)
- var neutral_colors:={"KZ":Color(0.36,0.22,0.50),"SA":Color(0.50,0.34,0.12),"ID":Color(0.12,0.40,0.46),"MN":Color(0.44,0.27,0.20),"PK":Color(0.24,0.42,0.18),"TR":Color(0.48,0.20,0.25),"MM":Color(0.40,0.34,0.14),"AF":Color(0.34,0.25,0.18),"YE":Color(0.38,0.28,0.30),"TH":Color(0.24,0.28,0.50),"ES":Color(0.50,0.40,0.12),"TM":Color(0.16,0.40,0.32),"SE":Color(0.18,0.34,0.48),"UZ":Color(0.22,0.42,0.38),"IQ":Color(0.42,0.24,0.18),"NO":Color(0.38,0.20,0.38),"FI":Color(0.24,0.38,0.48),"VN":Color(0.48,0.18,0.16),"MY":Color(0.18,0.32,0.42),"OM":Color(0.38,0.30,0.20)}
- return neutral_colors.get(iso,Color(0.12,0.12,0.12))
+func _territory_color(_iso:String,owner:String)->Color:
+ if owner=="NEUTRAL":return Color(0.08,0.08,0.08)
+ return _owner_color(owner)
 func _owner_color(owner:String)->Color:
  var c:={"RU":Color(0.16,0.48,0.96),"UA":Color(0.98,0.76,0.08),"PL":Color(0.94,0.18,0.38),"FR":Color(0.20,0.72,0.92),"DE":Color(0.70,0.28,0.88),"GB":Color(0.18,0.72,0.48),"CN":Color(0.94,0.22,0.12),"IN":Color(1.0,0.48,0.08),"IR":Color(0.08,0.58,0.24),"JP":Color(0.92,0.38,0.68)};return c.get(owner,Color(0.08,0.08,0.08))
 func _draw_soldiers(center:Vector2,amount:int,owner:String,direction:Vector2)->void:

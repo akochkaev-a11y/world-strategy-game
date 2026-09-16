@@ -13,6 +13,7 @@ const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","F
 const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
 const START_ARMY := 100.0
 const ARMY_SPEED := 110.0
+const AI_RESERVE := 30.0
 
 var player_country := ""
 var territories:Dictionary={}
@@ -47,11 +48,9 @@ func _ready()->void: mouse_filter=Control.MOUSE_FILTER_STOP
 
 func _feature_iso(props:Dictionary)->String:
     var iso:String=str(props.get("ISO_A2",""))
-    if iso=="" or iso=="-99": iso=str(props.get("ISO_A2_EH",""))
+    if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
     if iso=="" or iso=="-99":
-        var a3:String=str(props.get("ADM0_A3",""))
-        var m:Dictionary={"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
-        iso=str(m.get(a3,a3))
+        var a3:String=str(props.get("ADM0_A3",""));var m:Dictionary={"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"};iso=str(m.get(a3,a3))
     return iso
 
 func _load_geojson()->void:
@@ -252,32 +251,54 @@ func _arrive(index:int)->void:
     var attackers:float=float(a.amount);var defenders:float=float(t.army)
     if attackers>defenders:t.owner=str(a.owner);t.army=attackers-defenders
     else:t.army=defenders-attackers
-    _check_player_defeat()
-func _check_player_defeat()->void:
+    _check_end_state()
+func _check_end_state()->void:
     if not game_started or game_over:return
+    var player_alive:bool=false;var rival_alive:bool=false
     for iso in territories.keys():
-        if str(territories[iso].owner)==player_country:return
-    game_over=true;armies.clear();_show_defeat()
-func _show_defeat()->void:
-    var shade:=ColorRect.new();shade.color=Color(0.01,0.02,0.04,0.82);shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.mouse_filter=Control.MOUSE_FILTER_STOP;add_child(shade);var center:=CenterContainer.new();center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.add_child(center);var box:=VBoxContainer.new();box.custom_minimum_size=Vector2(520,250);box.alignment=BoxContainer.ALIGNMENT_CENTER;center.add_child(box);var title:=Label.new();title.text="ВЫ ПРОИГРАЛИ";title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;title.add_theme_font_size_override("font_size",42);box.add_child(title);var sub:=Label.new();sub.text="Все территории вашей державы захвачены";sub.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;sub.add_theme_font_size_override("font_size",18);box.add_child(sub);var button:=Button.new();button.text="НАЧАТЬ ЗАНОВО";button.custom_minimum_size=Vector2(320,60);button.add_theme_font_size_override("font_size",20);button.pressed.connect(_restart);box.add_child(button)
+        var owner:String=str(territories[iso].owner)
+        if owner==player_country:player_alive=true
+        elif owner!="NEUTRAL" and ACTIVE_IDS.has(owner):rival_alive=true
+    if not player_alive:game_over=true;armies.clear();_show_end_overlay("ВЫ ПРОИГРАЛИ","Все территории вашей державы захвачены")
+    elif not rival_alive:game_over=true;armies.clear();_show_end_overlay("ВЫ ПОБЕДИЛИ","Все державы-соперники уничтожены")
+func _show_end_overlay(title_text:String,subtitle_text:String)->void:
+    var shade:=ColorRect.new();shade.color=Color(0.01,0.02,0.04,0.82);shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.mouse_filter=Control.MOUSE_FILTER_STOP;add_child(shade)
+    var center:=CenterContainer.new();center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);shade.add_child(center)
+    var box:=VBoxContainer.new();box.custom_minimum_size=Vector2(520,250);box.alignment=BoxContainer.ALIGNMENT_CENTER;center.add_child(box)
+    var title:=Label.new();title.text=title_text;title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;title.add_theme_font_size_override("font_size",42);box.add_child(title)
+    var sub:=Label.new();sub.text=subtitle_text;sub.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;sub.add_theme_font_size_override("font_size",18);box.add_child(sub)
+    var button:=Button.new();button.text="НАЧАТЬ ЗАНОВО";button.custom_minimum_size=Vector2(320,60);button.add_theme_font_size_override("font_size",20);button.pressed.connect(_restart);box.add_child(button)
 func _restart()->void:get_tree().reload_current_scene()
 func _ai_attack()->void:
-    var sources:Array=[]
+    var owners:Array=[]
     for iso in territories.keys():
-        var t:Dictionary=territories[iso]
-        if str(t.owner)!="NEUTRAL" and str(t.owner)!=player_country and float(t.army)>=24.0:sources.append(str(iso))
-    if sources.is_empty():return
-    var source:String=str(sources[randi()%sources.size()])
-    if not feature_centers.has(source):return
-    var src:Dictionary=territories[source];var owner:String=str(src.owner);var candidates:Array=[]
+        var owner:String=str(territories[iso].owner)
+        if owner!="NEUTRAL" and owner!=player_country and not owners.has(owner):owners.append(owner)
+    if owners.is_empty():return
+    var owner:String=str(owners[randi()%owners.size()]);var owned:Array=[];var enemies:Array=[]
     for iso in territories.keys():
-        if str(iso)==source or not PLAYABLE_IDS.has(str(iso)) or not feature_centers.has(iso):continue
-        var target:Dictionary=territories[iso]
-        if str(target.owner)==owner:continue
-        var dist:float=Vector2(feature_centers[source]).distance_to(Vector2(feature_centers[iso]));var neutral_bonus:float=0.65 if str(target.owner)=="NEUTRAL" else 1.0;var score:float=(float(target.army)+20.0)*neutral_bonus+dist*0.09;candidates.append({"iso":str(iso),"score":score})
-    if candidates.is_empty():return
-    candidates.sort_custom(func(a,b):return float(a.score)<float(b.score));var target_iso:String=str(candidates[0].iso);var target:Dictionary=territories[target_iso]
-    if float(src.army)>float(target.army)*1.12+8.0:_send_army(source,target_iso,0.62,true)
+        var id:String=str(iso);var t:Dictionary=territories[iso]
+        if str(t.owner)==owner:owned.append(id)
+        elif str(t.owner)!=owner:enemies.append(id)
+    if owned.is_empty() or enemies.is_empty():return
+    enemies.sort_custom(func(a,b):return float(territories[str(a)].army)<float(territories[str(b)].army))
+    var target_iso:String=str(enemies[0]);var target:Dictionary=territories[target_iso];var target_army:float=float(target.army)
+    var rally:String="";var rally_dist:float=INF
+    for id in owned:
+        if not feature_centers.has(id) or not feature_centers.has(target_iso):continue
+        var d:float=Vector2(feature_centers[id]).distance_to(Vector2(feature_centers[target_iso]))
+        if d<rally_dist:rally_dist=d;rally=str(id)
+    if rally=="":return
+    var rally_t:Dictionary=territories[rally]
+    if float(rally_t.army)>target_army*1.12+8.0:
+        _send_army(rally,target_iso,0.68,true);return
+    var donor:String="";var donor_army:float=0.0
+    for id in owned:
+        if str(id)==rally:continue
+        var amount:float=float(territories[str(id)].army)
+        if amount>AI_RESERVE+8.0 and amount>donor_army:donor=str(id);donor_army=amount
+    if donor!="":
+        var sendable:float=maxf(1.0,donor_army-AI_RESERVE);var share:float=clampf(sendable/donor_army,0.25,0.78);_send_army(donor,rally,share,true)
 func _touch_pair()->Array:
     var vals:Array=touches.values()
     if vals.size()!=2:return []

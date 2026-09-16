@@ -61,7 +61,7 @@ func _show_country_chooser() -> void:
         grid.add_child(b)
 
     var hint := Label.new()
-    hint.text = "10 активных держав • 20 нейтральных стран • остальные территории исключены"
+    hint.text = "10 активных держав • 13 нейтральных стран • 23 игровые территории"
     hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     hint.modulate = Color(0.58, 0.68, 0.76)
     hint.add_theme_font_size_override("font_size", 14)

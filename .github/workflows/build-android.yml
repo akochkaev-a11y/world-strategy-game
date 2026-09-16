@@ -26,6 +26,14 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v4
 
+      - name: Install GeoJSON validation dependencies
+        shell: bash
+        run: |
+          set -e
+          apt-get update
+          apt-get install -y --no-install-recommends python3 ca-certificates
+          python3 --version
+
       - name: Download and validate country boundaries
         shell: bash
         run: |

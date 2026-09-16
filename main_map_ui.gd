@@ -8,6 +8,7 @@ const ACTIVE_COUNTRIES := {
 const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
 
 var world_map: Control
+var military_balance: Control
 var army_clock := 0.0
 var started := false
 var chooser: PanelContainer
@@ -76,6 +77,9 @@ func _start_game(selected: String) -> void:
     add_child(world_map)
     world_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     world_map.setup(ACTIVE_COUNTRIES, selected)
+    military_balance = preload("res://military_balance.gd").new()
+    add_child(military_balance)
+    military_balance.setup(world_map, selected)
     started = true
 
 func _process(delta: float) -> void:

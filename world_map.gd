@@ -74,7 +74,7 @@ func _bounds(poly:PackedVector2Array)->Rect2:
  for p in poly:a.x=minf(a.x,p.x);a.y=minf(a.y,p.y);b.x=maxf(b.x,p.x);b.y=maxf(b.y,p.y)
  return Rect2(a,b-a)
 func _owner_color(owner:String)->Color:
- var c:={"RU":Color(0.18,0.42,0.92),"UA":Color(0.12,0.62,0.96),"PL":Color(0.92,0.25,0.38),"FR":Color(0.22,0.34,0.82),"DE":Color(0.22,0.22,0.24),"GB":Color(0.34,0.22,0.72),"CN":Color(0.90,0.12,0.12),"IN":Color(0.96,0.52,0.10),"IR":Color(0.10,0.62,0.30),"JP":Color(0.90,0.90,0.94)};return c.get(owner,Color(0.30,0.33,0.36))
+ var c:={"RU":Color(0.16,0.48,0.96),"UA":Color(0.98,0.76,0.08),"PL":Color(0.94,0.18,0.38),"FR":Color(0.20,0.72,0.92),"DE":Color(0.70,0.28,0.88),"GB":Color(0.18,0.72,0.48),"CN":Color(0.94,0.22,0.12),"IN":Color(1.0,0.48,0.08),"IR":Color(0.08,0.58,0.24),"JP":Color(0.92,0.38,0.68)};return c.get(owner,Color(0.30,0.33,0.36))
 func _draw_soldiers(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
  var n:int=mini(amount,MAX_DRAWN_SOLDIERS);var side:=Vector2(-direction.y,direction.x)
  for i in range(n):
@@ -95,9 +95,9 @@ func _draw()->void:
   if not polys.is_empty():hit_polygons[iso]=polys
  for iso in feature_centers.keys():
   var t:Dictionary=territories[iso];var c:Vector2=feature_centers[iso];var owner:=str(t.owner);var title:=str(NAMES.get(iso,"")) if ACTIVE_IDS.has(iso) else "";var flag:=str(FLAGS.get(owner,"")) if owner!="NEUTRAL" else ""
-  if flag!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(50,45),flag,HORIZONTAL_ALIGNMENT_CENTER,100,56,6,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(50,45),flag,HORIZONTAL_ALIGNMENT_CENTER,100,56,Color.WHITE)
-  if title!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(70,-4),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(70,-4),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color.WHITE)
-  var count:=str(int(float(t.army)));draw_string_outline(ThemeDB.fallback_font,c-Vector2(60,-22),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(60,-22),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
+  if flag!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(50,14),flag,HORIZONTAL_ALIGNMENT_CENTER,100,28,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(50,14),flag,HORIZONTAL_ALIGNMENT_CENTER,100,28,Color.WHITE)
+  if title!="":draw_string_outline(ThemeDB.fallback_font,c-Vector2(70,-12),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(70,-12),title,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color.WHITE)
+  var count:=str(int(float(t.army)));draw_string_outline(ThemeDB.fallback_font,c-Vector2(60,-30),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,4,Color.BLACK);draw_string(ThemeDB.fallback_font,c-Vector2(60,-30),count,HORIZONTAL_ALIGNMENT_CENTER,120,17,Color.WHITE)
  if drag_source!="" and feature_centers.has(drag_source) and touches.size()==1:
   var finger:Vector2=Vector2(touches.values()[0]);var source_pos:Vector2=Vector2(feature_centers[drag_source]);draw_line(source_pos,finger,Color(1,1,1,0.42),2.0,true);draw_circle(source_pos,13.0+sin(anim_time*5.0)*2.0,Color(1,0.83,0.28,0.55),false,2.5)
   var hover:=_hit(finger);if hover!="" and feature_centers.has(hover):draw_circle(Vector2(feature_centers[hover]),19.0+sin(anim_time*5.0)*2.0,Color(1,1,1,0.48),false,2.5)

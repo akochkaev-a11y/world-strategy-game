@@ -38,21 +38,14 @@ var game_over:=false
 var game_started:=false
 
 func setup(_data:Dictionary,selected:String)->void:
-    player_country=selected
-    _load_geojson()
-    _ensure_territories()
-    game_started=territories.size()==PLAYABLE_IDS.size()
-    queue_redraw()
-
-func _ready()->void: mouse_filter=Control.MOUSE_FILTER_STOP
-
+    player_country=selected;_load_geojson();_ensure_territories();game_started=territories.size()==PLAYABLE_IDS.size();queue_redraw()
+func _ready()->void:mouse_filter=Control.MOUSE_FILTER_STOP
 func _feature_iso(props:Dictionary)->String:
     var iso:String=str(props.get("ISO_A2",""))
     if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
     if iso=="" or iso=="-99":
         var a3:String=str(props.get("ADM0_A3",""));var m:Dictionary={"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"};iso=str(m.get(a3,a3))
     return iso
-
 func _load_geojson()->void:
     map_features.clear()
     if not FileAccess.file_exists(GEOJSON_PATH):push_error("Missing map geometry: "+GEOJSON_PATH);return
@@ -64,14 +57,12 @@ func _load_geojson()->void:
     for raw_feature in parsed.get("features",[]):
         if typeof(raw_feature)!=TYPE_DICTIONARY:continue
         var feature:Dictionary=raw_feature;var props:Dictionary=feature.get("properties",{});var iso:String=_feature_iso(props);var geom:Dictionary=feature.get("geometry",{});var geom_type:String=str(geom.get("type",""))
-        if not MAP_IDS.has(iso):continue
-        if geom_type!="Polygon" and geom_type!="MultiPolygon":continue
+        if not MAP_IDS.has(iso) or (geom_type!="Polygon" and geom_type!="MultiPolygon"):continue
         if seen.has(iso):push_error("Duplicate map geometry: "+iso);continue
         seen[iso]=true;map_features.append(feature)
     for iso in MAP_IDS:
         if not seen.has(iso):push_error("Missing map geometry: "+str(iso))
     if map_features.size()!=MAP_IDS.size():push_error("Map geometry count must be exactly 30, got "+str(map_features.size()))
-
 func _ensure_territories()->void:
     territories.clear();growth_fraction.clear()
     if map_features.size()!=MAP_IDS.size():return
@@ -80,20 +71,17 @@ func _ensure_territories()->void:
         if not PLAYABLE_IDS.has(iso) or territories.has(iso):continue
         territories[iso]={"owner":iso if ACTIVE_IDS.has(iso) else "NEUTRAL","army":START_ARMY};growth_fraction[iso]=0.0
     if territories.size()!=23:push_error("Territory count must be exactly 23, got "+str(territories.size()));territories.clear()
-
 func grow_armies()->void:
     if game_over:return
     for iso in territories.keys():
         var t:Dictionary=territories[iso];var rate:float=1.0 if str(t.owner)!="NEUTRAL" else 0.5;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate;var whole:int=int(floor(float(growth_fraction[iso])))
         if whole>0:t.army=float(t.army)+whole;growth_fraction[iso]=float(growth_fraction[iso])-whole
     queue_redraw()
-
 func _process(delta:float)->void:
     if game_over:return
     anim_time+=delta;_move_armies(delta);ai_clock+=delta
     if ai_clock>=4.0:ai_clock=0.0;_ai_attack()
     queue_redraw()
-
 func _base_project(lon:float,lat:float)->Vector2:return Vector2((lon-LON_MIN)/(LON_MAX-LON_MIN)*size.x,(LAT_MAX-lat)/(LAT_MAX-LAT_MIN)*size.y)
 func _project(lon:float,lat:float)->Vector2:
     var c:Vector2=size*0.5;return c+(_base_project(lon,lat)-c)*zoom+pan
@@ -116,18 +104,31 @@ func _bounds(poly:PackedVector2Array)->Rect2:
 func _polygon_area(poly:PackedVector2Array)->float:
     if poly.size()<3:return 0.0
     var total:float=0.0
-    for i in range(poly.size()):var a:Vector2=poly[i];var b:Vector2=poly[(i+1)%poly.size()];total+=a.x*b.y-b.x*a.y
+    for i in range(poly.size()):
+        var a:Vector2=poly[i];var b:Vector2=poly[(i+1)%poly.size()];total+=a.x*b.y-b.x*a.y
     return absf(total)*0.5
+func _segment_distance_squared(p:Vector2,a:Vector2,b:Vector2)->float:
+    var ab:Vector2=b-a;var denom:float=ab.length_squared()
+    if denom<=0.0001:return p.distance_squared_to(a)
+    var t:float=clampf((p-a).dot(ab)/denom,0.0,1.0);return p.distance_squared_to(a+ab*t)
+func _edge_clearance_squared(p:Vector2,poly:PackedVector2Array)->float:
+    var best:float=INF
+    for i in range(poly.size()):best=minf(best,_segment_distance_squared(p,poly[i],poly[(i+1)%poly.size()]))
+    return best
 func _safe_anchor(poly:PackedVector2Array)->Vector2:
-    var bb:Rect2=_bounds(poly);var center:Vector2=bb.get_center()
-    if Geometry2D.is_point_in_polygon(center,poly):return center
-    var best:Vector2=poly[0];var best_d:float=INF
-    for gy in range(1,10):
-        for gx in range(1,10):
-            var p:Vector2=bb.position+Vector2(bb.size.x*float(gx)/10.0,bb.size.y*float(gy)/10.0)
-            if Geometry2D.is_point_in_polygon(p,poly):
-                var d:float=p.distance_squared_to(center)
-                if d<best_d:best=p;best_d=d
+    if poly.size()<3:return Vector2.ZERO
+    var bb:Rect2=_bounds(poly);var best:Vector2=poly[0];var best_clearance:float=-1.0
+    var search_rect:Rect2=bb
+    for pass_index in range(4):
+        var steps:int=16
+        for gy in range(steps+1):
+            for gx in range(steps+1):
+                var p:Vector2=search_rect.position+Vector2(search_rect.size.x*float(gx)/float(steps),search_rect.size.y*float(gy)/float(steps))
+                if not Geometry2D.is_point_in_polygon(p,poly):continue
+                var clearance:float=_edge_clearance_squared(p,poly)
+                if clearance>best_clearance:best_clearance=clearance;best=p
+        var span:Vector2=search_rect.size/float(steps)*2.5
+        search_rect=Rect2(best-span*0.5,span)
     return best
 func _scaled_poly(poly:PackedVector2Array,center:Vector2,scale:float)->PackedVector2Array:
     var out:=PackedVector2Array()
@@ -158,14 +159,7 @@ func _draw_border(poly:PackedVector2Array,owner:String,iso:String)->void:
     else:
         var c:Color=_owner_color(owner);glow=Color(c.r,c.g,c.b,0.16 if not selected else 0.30);core=Color(c.r*0.72+0.28,c.g*0.72+0.28,c.b*0.72+0.28,0.82);gw=4.0 if selected else 2.8;cw=1.5 if selected else 1.0
     for i in range(poly.size()):var a:Vector2=poly[i];var b:Vector2=poly[(i+1)%poly.size()];draw_line(a,b,glow,gw,true);draw_line(a,b,core,cw,true)
-func _marker_offset(iso:String)->Vector2:
-    var o:Dictionary={"GB":Vector2(-10,-12),"FR":Vector2(-12,19),"DE":Vector2(8,-18),"PL":Vector2(19,9),"UA":Vector2(20,10),"JP":Vector2(20,0),"IR":Vector2(0,12),"IN":Vector2(0,12)};return o.get(iso,Vector2.ZERO)
-func _marker_position(iso:String,anchor:Vector2)->Vector2:
-    var candidate:Vector2=anchor+_marker_offset(iso)
-    if hit_polygons.has(iso):
-        for poly in hit_polygons[iso]:
-            if Geometry2D.is_point_in_polygon(candidate,poly):return candidate
-    return anchor
+func _marker_position(_iso:String,anchor:Vector2)->Vector2:return anchor
 func _badge_box(bg:Color,border:Color,radius:int)->StyleBoxFlat:
     var box:=StyleBoxFlat.new();box.bg_color=bg;box.border_color=border;box.set_border_width_all(1);box.corner_radius_top_left=radius;box.corner_radius_top_right=radius;box.corner_radius_bottom_left=radius;box.corner_radius_bottom_right=radius;return box
 func _draw_badge(center:Vector2,w:float,h:float,border:=Color(0.34,0.55,0.66,0.42))->void:draw_style_box(_badge_box(Color(0.003,0.012,0.022,0.86),border,9),Rect2(center-Vector2(w*0.5,h*0.5),Vector2(w,h)))
@@ -290,8 +284,7 @@ func _ai_attack()->void:
         if d<rally_dist:rally_dist=d;rally=str(id)
     if rally=="":return
     var rally_t:Dictionary=territories[rally]
-    if float(rally_t.army)>target_army*1.12+8.0:
-        _send_army(rally,target_iso,0.68,true);return
+    if float(rally_t.army)>target_army*1.12+8.0:_send_army(rally,target_iso,0.68,true);return
     var donor:String="";var donor_army:float=0.0
     for id in owned:
         if str(id)==rally:continue

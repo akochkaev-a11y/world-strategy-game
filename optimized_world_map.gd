@@ -1,5 +1,13 @@
 extends "res://world_map.gd"
 
+const UNIT_SPACING := 7.0
+const UNIT_RADIUS := 3.2
+const MAX_VISIBLE_UNITS := 90
+const FIELD_KILL_INTERVAL := 0.075
+const ARRIVAL_KILL_INTERVAL := 0.055
+
+var field_combat_clock:Dictionary={}
+
 func _safe_anchor(poly:PackedVector2Array)->Vector2:
     if poly.size()<3:return Vector2.ZERO
     var bb:Rect2=_bounds(poly);var center:Vector2=bb.get_center()
@@ -12,3 +20,80 @@ func _safe_anchor(poly:PackedVector2Array)->Vector2:
             var distance:float=p.distance_squared_to(center)
             if distance<best_distance:best_distance=distance;best=p
     return best
+
+func _army_direction(a:Dictionary)->Vector2:
+    var target:String=str(a.target)
+    if feature_centers.has(target):
+        var d:Vector2=Vector2(feature_centers[target])-Vector2(a.pos)
+        if d.length_squared()>0.01:return d.normalized()
+    return Vector2.RIGHT
+
+func _army_tail(a:Dictionary)->Vector2:
+    var visible:int=mini(int(float(a.amount)),MAX_VISIBLE_UNITS)
+    return Vector2(a.pos)-_army_direction(a)*UNIT_SPACING*float(maxi(0,visible-1))
+
+func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
+    if amount<=0:return
+    var visible:int=mini(amount,MAX_VISIBLE_UNITS);var color:Color=_owner_color(owner);var side:Vector2=Vector2(-direction.y,direction.x)
+    for i in range(visible):
+        var fi:float=float(i);var lateral:float=sin(fi*2.17+float(owner.hash()%17))*1.9;var jitter:float=sin(fi*0.73+anim_time*2.2)*0.65;var p:Vector2=center-direction*(fi*UNIT_SPACING+jitter)+side*lateral
+        draw_circle(p,UNIT_RADIUS+2.2,Color(color.r,color.g,color.b,0.10));draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
+    draw_string_outline(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,3,Color(0,0,0,0.92));draw_string(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,Color.WHITE)
+
+func _segments_touch(a:Dictionary,b:Dictionary)->bool:
+    var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b)
+    var crossing:Variant=Geometry2D.segment_intersects_segment(a0,a1,b0,b1)
+    if crossing!=null:return true
+    var limit_sq:float=(UNIT_RADIUS*2.4)*(UNIT_RADIUS*2.4)
+    return _segment_distance_squared(a0,b0,b1)<=limit_sq or _segment_distance_squared(a1,b0,b1)<=limit_sq or _segment_distance_squared(b0,a0,a1)<=limit_sq or _segment_distance_squared(b1,a0,a1)<=limit_sq
+
+func _collision_point(a:Dictionary,b:Dictionary)->Vector2:
+    var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b);var crossing:Variant=Geometry2D.segment_intersects_segment(a0,a1,b0,b1)
+    if crossing is Vector2:return Vector2(crossing)
+    return (a0+b0)*0.5
+
+func _move_armies(delta:float)->void:
+    for i in range(armies.size()-1,-1,-1):
+        if i>=armies.size():continue
+        var a:Dictionary=armies[i];var target:String=str(a.target)
+        if not PLAYABLE_IDS.has(target) or not feature_centers.has(target):armies.remove_at(i);continue
+        var dest:Vector2=Vector2(feature_centers[target]);var pos:Vector2=Vector2(a.pos)
+        if pos.distance_to(dest)<=ARMY_SPEED*delta:
+            a.pos=dest;a["arrival_clock"]=float(a.get("arrival_clock",0.0))+delta;_resolve_arrival_stream(i)
+        else:a.pos=pos.move_toward(dest,ARMY_SPEED*delta)
+    _resolve_line_collisions(delta)
+
+func _resolve_arrival_stream(index:int)->void:
+    if index<0 or index>=armies.size():return
+    var a:Dictionary=armies[index]
+    if float(a.get("arrival_clock",0.0))<ARRIVAL_KILL_INTERVAL:return
+    a["arrival_clock"]=float(a.get("arrival_clock",0.0))-ARRIVAL_KILL_INTERVAL
+    var target:String=str(a.target)
+    if not territories.has(target):armies.remove_at(index);return
+    var t:Dictionary=territories[target];var owner:String=str(a.owner)
+    if str(t.owner)==owner:
+        t.army=float(t.army)+float(a.amount);armies.remove_at(index);return
+    a.amount=float(a.amount)-1.0
+    if float(t.army)>0.0:t.army=maxf(0.0,float(t.army)-1.0)
+    else:
+        t.owner=owner;t.army=1.0
+    collision_flashes.append({"pos":Vector2(a.pos),"life":0.18})
+    if float(a.amount)<=0.0:armies.remove_at(index)
+    _check_end_state()
+
+func _resolve_line_collisions(delta:float)->void:
+    var active_keys:Dictionary={};var i:int=0
+    while i<armies.size():
+        var j:int=i+1
+        while j<armies.size():
+            if str(armies[i].owner)!=str(armies[j].owner) and _segments_touch(armies[i],armies[j]):
+                var key:String=str(armies[i].get_instance_id() if armies[i] is Object else i)+":"+str(j)
+                active_keys[key]=true;field_combat_clock[key]=float(field_combat_clock.get(key,0.0))+delta
+                if float(field_combat_clock[key])>=FIELD_KILL_INTERVAL:
+                    field_combat_clock[key]=float(field_combat_clock[key])-FIELD_KILL_INTERVAL;armies[i].amount=float(armies[i].amount)-1.0;armies[j].amount=float(armies[j].amount)-1.0;collision_flashes.append({"pos":_collision_point(armies[i],armies[j]),"life":0.16})
+                    if float(armies[j].amount)<=0.0:armies.remove_at(j);continue
+                    if float(armies[i].amount)<=0.0:armies.remove_at(i);i-=1;break
+            j+=1
+        i+=1
+    for key in field_combat_clock.keys():
+        if not active_keys.has(key):field_combat_clock.erase(key)

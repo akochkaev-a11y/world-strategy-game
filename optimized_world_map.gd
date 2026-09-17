@@ -87,7 +87,7 @@ func _resolve_line_collisions(delta:float)->void:
         var j:int=i+1
         while j<armies.size():
             if str(armies[i].owner)!=str(armies[j].owner) and _segments_touch(armies[i],armies[j]):
-                var key:String=str(armies[i].get_instance_id() if armies[i] is Object else i)+":"+str(j)
+                var key:String=str(i)+":"+str(j)
                 active_keys[key]=true;field_combat_clock[key]=float(field_combat_clock.get(key,0.0))+delta
                 if float(field_combat_clock[key])>=FIELD_KILL_INTERVAL:
                     field_combat_clock[key]=float(field_combat_clock[key])-FIELD_KILL_INTERVAL;armies[i].amount=float(armies[i].amount)-1.0;armies[j].amount=float(armies[j].amount)-1.0;collision_flashes.append({"pos":_collision_point(armies[i],armies[j]),"life":0.16})

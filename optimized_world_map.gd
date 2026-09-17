@@ -1,6 +1,6 @@
 extends "res://world_map.gd"
 
-const UNIT_SPACING := 7.0
+const UNIT_SPACING := 9.0
 const UNIT_RADIUS := 3.2
 const MAX_VISIBLE_UNITS := 90
 const FIELD_KILL_INTERVAL := 0.075
@@ -34,11 +34,15 @@ func _army_tail(a:Dictionary)->Vector2:
 
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
     if amount<=0:return
-    var visible:int=mini(amount,MAX_VISIBLE_UNITS);var color:Color=_owner_color(owner);var side:Vector2=Vector2(-direction.y,direction.x)
+    var visible:int=mini(amount,MAX_VISIBLE_UNITS)
+    var color:Color=_owner_color(owner)
+    var side:Vector2=Vector2(-direction.y,direction.x)
     for i in range(visible):
-        var fi:float=float(i);var lateral:float=sin(fi*2.17+float(owner.hash()%17))*1.9;var jitter:float=sin(fi*0.73+anim_time*2.2)*0.65;var p:Vector2=center-direction*(fi*UNIT_SPACING+jitter)+side*lateral
-        draw_circle(p,UNIT_RADIUS+2.2,Color(color.r,color.g,color.b,0.10));draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
-    draw_string_outline(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,3,Color(0,0,0,0.92));draw_string(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,Color.WHITE)
+        var p:Vector2=center-direction*(float(i)*UNIT_SPACING)
+        draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
+        draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
+    draw_string_outline(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,3,Color(0,0,0,0.92))
+    draw_string(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,Color.WHITE)
 
 func _segments_touch(a:Dictionary,b:Dictionary)->bool:
     var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b)

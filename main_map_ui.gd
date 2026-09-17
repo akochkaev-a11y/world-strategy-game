@@ -73,7 +73,7 @@ func _show_country_chooser() -> void:
 func _start_game(selected: String) -> void:
     if is_instance_valid(chooser):
         chooser.queue_free()
-    world_map = preload("res://world_map.gd").new()
+    world_map = preload("res://optimized_world_map.gd").new()
     add_child(world_map)
     world_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     world_map.setup(ACTIVE_COUNTRIES, selected)

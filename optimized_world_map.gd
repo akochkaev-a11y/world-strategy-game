@@ -6,8 +6,10 @@ const MAX_VISIBLE_UNITS := 90
 const FIELD_KILL_INTERVAL := 0.075
 const ARRIVAL_KILL_INTERVAL := 0.055
 const EMIT_INTERVAL := UNIT_SPACING / ARMY_SPEED
+const FINGER_AIM_OFFSET := Vector2(0.0,-64.0)
 
 var field_combat_clock:Dictionary={}
+var hovered_target:String=""
 
 func _safe_anchor(poly:PackedVector2Array)->Vector2:
     if poly.size()<3:return Vector2.ZERO
@@ -22,28 +24,42 @@ func _safe_anchor(poly:PackedVector2Array)->Vector2:
             if distance<best_distance:best_distance=distance;best=p
     return best
 
+func _route_point(a:Dictionary,t:float)->Vector2:
+    var start:Vector2=Vector2(a.get("start",a.pos))
+    var finish:Vector2=Vector2(a.get("finish",a.pos))
+    var control:Vector2=Vector2(a.get("control",(start+finish)*0.5))
+    var u:float=1.0-clampf(t,0.0,1.0)
+    var tt:float=clampf(t,0.0,1.0)
+    return u*u*start+2.0*u*tt*control+tt*tt*finish
+
 func _army_direction(a:Dictionary)->Vector2:
-    var target:String=str(a.target)
-    if feature_centers.has(target):
-        var d:Vector2=Vector2(feature_centers[target])-Vector2(a.pos)
-        if d.length_squared()>0.01:return d.normalized()
-    return Vector2.RIGHT
+    var t:float=clampf(float(a.get("progress",0.0)),0.0,1.0)
+    var p0:Vector2=_route_point(a,maxf(0.0,t-0.01))
+    var p1:Vector2=_route_point(a,minf(1.0,t+0.01))
+    var d:Vector2=p1-p0
+    return d.normalized() if d.length_squared()>0.01 else Vector2.RIGHT
 
 func _army_tail(a:Dictionary)->Vector2:
     var visible:int=mini(int(float(a.amount)),MAX_VISIBLE_UNITS)
-    return Vector2(a.pos)-_army_direction(a)*UNIT_SPACING*float(maxi(0,visible-1))
+    var step:float=UNIT_SPACING/maxf(1.0,float(a.get("route_length",1.0)))
+    return _route_point(a,maxf(0.0,float(a.get("progress",0.0))-step*float(maxi(0,visible-1))))
 
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
+    pass
+
+func _draw_stream(a:Dictionary)->void:
+    var amount:int=int(float(a.amount))
     if amount<=0:return
     var visible:int=mini(amount,MAX_VISIBLE_UNITS)
-    var color:Color=_owner_color(owner)
-    var side:Vector2=Vector2(-direction.y,direction.x)
+    var color:Color=_owner_color(str(a.owner))
+    var progress:float=float(a.get("progress",0.0))
+    var step:float=UNIT_SPACING/maxf(1.0,float(a.get("route_length",1.0)))
     for i in range(visible):
-        var p:Vector2=center-direction*(float(i)*UNIT_SPACING)
+        var t:float=maxf(0.0,progress-step*float(i))
+        var p:Vector2=_route_point(a,t)
         draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
         draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
-    draw_string_outline(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,3,Color(0,0,0,0.92))
-    draw_string(ThemeDB.fallback_font,center+side*12.0+Vector2(-24,-18),str(amount),HORIZONTAL_ALIGNMENT_CENTER,48,14,Color.WHITE)
+
 
 func _segments_touch(a:Dictionary,b:Dictionary)->bool:
     var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b)
@@ -72,7 +88,8 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
     var free:float=maxf(0.0,float(src.army)-_reserved_from(from_iso))
     var requested:float=floor(free*share)
     if requested<1.0 or not feature_centers.has(from_iso):return
-    armies.append({"owner":str(src.owner),"amount":0.0,"pending":requested,"emit_clock":EMIT_INTERVAL,"source":from_iso,"pos":Vector2(feature_centers[from_iso]),"target":to_iso})
+    var start:Vector2=Vector2(feature_centers[from_iso]);var finish:Vector2=Vector2(feature_centers[to_iso]);var d:Vector2=finish-start;var side:Vector2=Vector2(-d.y,d.x).normalized();var control:Vector2=(start+finish)*0.5+side*minf(42.0,d.length()*0.11);var route_len:float=maxf(1.0,start.distance_to(control)+control.distance_to(finish))
+    armies.append({"owner":str(src.owner),"amount":0.0,"pending":requested,"emit_clock":EMIT_INTERVAL,"source":from_iso,"pos":start,"start":start,"finish":finish,"control":control,"route_length":route_len,"progress":0.0,"target":to_iso})
 
 func _send_amount(from_iso:String,to_iso:String,amount:float)->void:
     if not territories.has(from_iso):return
@@ -112,10 +129,11 @@ func _move_armies(delta:float)->void:
         if not PLAYABLE_IDS.has(target) or not feature_centers.has(target):armies.remove_at(i);continue
         _emit_units(a,delta)
         if float(a.amount)<=0.0:continue
-        var dest:Vector2=Vector2(feature_centers[target]);var pos:Vector2=Vector2(a.pos)
-        if pos.distance_to(dest)<=ARMY_SPEED*delta:
-            a.pos=dest;a["arrival_clock"]=float(a.get("arrival_clock",0.0))+delta;_resolve_arrival_stream(i)
-        else:a.pos=pos.move_toward(dest,ARMY_SPEED*delta)
+        var route_len:float=maxf(1.0,float(a.get("route_length",1.0)))
+        var progress:float=minf(1.0,float(a.get("progress",0.0))+ARMY_SPEED*delta/route_len)
+        a["progress"]=progress;a.pos=_route_point(a,progress)
+        if progress>=1.0:
+            a["arrival_clock"]=float(a.get("arrival_clock",0.0))+delta;_resolve_arrival_stream(i)
     _resolve_line_collisions(delta)
 
 func _resolve_arrival_stream(index:int)->void:

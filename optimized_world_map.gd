@@ -5,6 +5,7 @@ const UNIT_RADIUS := 3.2
 const MAX_VISIBLE_UNITS := 90
 const FIELD_KILL_INTERVAL := 0.075
 const ARRIVAL_KILL_INTERVAL := 0.055
+const EMIT_INTERVAL := UNIT_SPACING / ARMY_SPEED
 
 var field_combat_clock:Dictionary={}
 
@@ -56,11 +57,61 @@ func _collision_point(a:Dictionary,b:Dictionary)->Vector2:
     if crossing is Vector2:return Vector2(crossing)
     return (a0+b0)*0.5
 
+
+func _reserved_from(source_iso:String)->float:
+    var total:float=0.0
+    for a in armies:
+        if str(a.get("source",""))==source_iso:
+            total+=float(a.get("pending",0.0))
+    return total
+
+func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
+    if game_over or not PLAYABLE_IDS.has(from_iso) or not PLAYABLE_IDS.has(to_iso) or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso):return
+    var src:Dictionary=territories[from_iso]
+    if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
+    var free:float=maxf(0.0,float(src.army)-_reserved_from(from_iso))
+    var requested:float=floor(free*share)
+    if requested<1.0 or not feature_centers.has(from_iso):return
+    armies.append({"owner":str(src.owner),"amount":0.0,"pending":requested,"emit_clock":EMIT_INTERVAL,"source":from_iso,"pos":Vector2(feature_centers[from_iso]),"target":to_iso})
+
+func _send_amount(from_iso:String,to_iso:String,amount:float)->void:
+    if not territories.has(from_iso):return
+    var free:float=maxf(0.0,float(territories[from_iso].army)-_reserved_from(from_iso)-AI_RESERVE)
+    var send:float=minf(floor(amount),floor(free))
+    if send<1.0:return
+    _send_army(from_iso,to_iso,send/maxf(1.0,float(territories[from_iso].army)-_reserved_from(from_iso)),true)
+
+func _projected_at(owner:String,target_iso:String)->float:
+    var total:float=0.0
+    for a in armies:
+        if str(a.owner)==owner and str(a.target)==target_iso:
+            total+=float(a.amount)+float(a.get("pending",0.0))
+    return total
+
+func _emit_units(a:Dictionary,delta:float)->void:
+    var pending:int=int(float(a.get("pending",0.0)))
+    if pending<=0:return
+    var source:String=str(a.get("source",""))
+    if not territories.has(source) or str(territories[source].owner)!=str(a.owner):
+        a["pending"]=0.0
+        return
+    a["emit_clock"]=float(a.get("emit_clock",0.0))+delta
+    while float(a["emit_clock"])>=EMIT_INTERVAL and int(float(a.get("pending",0.0)))>0:
+        if float(territories[source].army)<1.0:
+            a["pending"]=0.0
+            break
+        a["emit_clock"]=float(a["emit_clock"])-EMIT_INTERVAL
+        territories[source].army=float(territories[source].army)-1.0
+        a.amount=float(a.amount)+1.0
+        a["pending"]=float(a["pending"])-1.0
+
 func _move_armies(delta:float)->void:
     for i in range(armies.size()-1,-1,-1):
         if i>=armies.size():continue
         var a:Dictionary=armies[i];var target:String=str(a.target)
         if not PLAYABLE_IDS.has(target) or not feature_centers.has(target):armies.remove_at(i);continue
+        _emit_units(a,delta)
+        if float(a.amount)<=0.0:continue
         var dest:Vector2=Vector2(feature_centers[target]);var pos:Vector2=Vector2(a.pos)
         if pos.distance_to(dest)<=ARMY_SPEED*delta:
             a.pos=dest;a["arrival_clock"]=float(a.get("arrival_clock",0.0))+delta;_resolve_arrival_stream(i)
@@ -75,14 +126,15 @@ func _resolve_arrival_stream(index:int)->void:
     var target:String=str(a.target)
     if not territories.has(target):armies.remove_at(index);return
     var t:Dictionary=territories[target];var owner:String=str(a.owner)
-    if str(t.owner)==owner:
-        t.army=float(t.army)+float(a.amount);armies.remove_at(index);return
     a.amount=float(a.amount)-1.0
-    if float(t.army)>0.0:t.army=maxf(0.0,float(t.army)-1.0)
+    if str(t.owner)==owner:
+        t.army=float(t.army)+1.0
+    elif float(t.army)>0.0:
+        t.army=maxf(0.0,float(t.army)-1.0)
+        collision_flashes.append({"pos":Vector2(a.pos),"life":0.18})
     else:
         t.owner=owner;t.army=1.0
-    collision_flashes.append({"pos":Vector2(a.pos),"life":0.18})
-    if float(a.amount)<=0.0:armies.remove_at(index)
+    if float(a.amount)<=0.0 and float(a.get("pending",0.0))<=0.0:armies.remove_at(index)
     _check_end_state()
 
 func _resolve_line_collisions(delta:float)->void:

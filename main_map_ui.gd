@@ -11,6 +11,8 @@ var world_map: Control
 var military_balance: Control
 var army_clock := 0.0
 var started := false
+var match_time := 0.0
+var timer_label: Label
 var chooser: PanelContainer
 
 func _ready() -> void:
@@ -80,13 +82,34 @@ func _start_game(selected: String) -> void:
     military_balance = preload("res://military_balance.gd").new()
     add_child(military_balance)
     military_balance.setup(world_map, selected)
+    timer_label = Label.new()
+    timer_label.position = Vector2(18,16)
+    timer_label.size = Vector2(150,42)
+    timer_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    timer_label.add_theme_font_size_override("font_size",22)
+    timer_label.add_theme_color_override("font_color",Color(0.92,0.96,0.99))
+    timer_label.add_theme_color_override("font_shadow_color",Color(0,0,0,0.85))
+    timer_label.add_theme_constant_override("shadow_offset_x",2)
+    timer_label.add_theme_constant_override("shadow_offset_y",2)
+    add_child(timer_label)
+    match_time = 0.0
+    _update_timer()
     started = true
 
 func _process(delta: float) -> void:
     if not started:
         return
+    match_time += delta
+    _update_timer()
     army_clock += delta
     while army_clock >= 1.0:
         army_clock -= 1.0
         if world_map and is_instance_valid(world_map):
             world_map.grow_armies()
+
+func _update_timer() -> void:
+    if not is_instance_valid(timer_label): return
+    var total_seconds: int = int(match_time)
+    var minutes: int = total_seconds / 60
+    var seconds: int = total_seconds % 60
+    timer_label.text = "%02d:%02d" % [minutes,seconds]

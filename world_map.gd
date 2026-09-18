@@ -28,6 +28,7 @@ var zoom:=1.0
 var pan:=Vector2.ZERO
 var touches:Dictionary={}
 var drag_source:=""
+var aim_target:=""
 var mouse_down:=false
 var mouse_pos:=Vector2.ZERO
 var pinch_distance:=0.0
@@ -193,6 +194,8 @@ func _draw()->void:
             var p:PackedVector2Array=_poly(ring)
             if p.size()<3:continue
             _draw_territory(p,owner,iso);_draw_border(p,owner,iso)
+            if iso==aim_target:
+                var lift_center:Vector2=_safe_anchor(p);draw_colored_polygon(_scaled_poly(p,lift_center,0.94),Color(1.0,0.86,0.34,0.10));for edge_i in range(p.size()):draw_line(p[edge_i],p[(edge_i+1)%p.size()],Color(1.0,0.88,0.38,0.72),4.0,true)
             if is_playable:
                 var area:float=_polygon_area(p)
                 if area>float(best.get(iso,0.0)):best[iso]=area;feature_centers[iso]=_safe_anchor(p)
@@ -202,11 +205,17 @@ func _draw()->void:
     if drag_source!="" and feature_centers.has(drag_source) and not camera_gesture:
         var finger:Vector2=mouse_pos
         if touches.size()==1:finger=Vector2(touches.values()[0])
-        var source:Vector2=Vector2(feature_centers[drag_source]);var route:PackedVector2Array=_curve_points(source,finger);var route_color:Color=_owner_color(player_country);draw_polyline(route,Color(route_color.r,route_color.g,route_color.b,0.13),5.0,true);draw_polyline(route,Color(route_color.r*0.55+0.45,route_color.g*0.55+0.45,route_color.b*0.55+0.45,0.82),1.5,true)
+        var aim:Vector2=finger+Vector2(0.0,-64.0);var source:Vector2=Vector2(feature_centers[drag_source]);var route:PackedVector2Array=_curve_points(source,aim);var route_color:Color=_owner_color(player_country)
+        for ri in range(route.size()-1):
+            var width:float=10.0-6.0*float(ri)/float(maxi(1,route.size()-2));draw_line(route[ri],route[ri+1],Color(route_color.r,route_color.g,route_color.b,0.34),width,true)
+        if route.size()>=2:
+            var tip:Vector2=route[route.size()-1];var back:Vector2=route[route.size()-2];var dir:Vector2=(tip-back).normalized();var side:Vector2=Vector2(-dir.y,dir.x);var head:=PackedVector2Array([tip,tip-dir*28.0+side*14.0,tip-dir*28.0-side*14.0]);draw_colored_polygon(head,Color(route_color.r*0.55+0.45,route_color.g*0.55+0.45,route_color.b*0.55+0.45,0.92))
     for a in armies:
-        var pos:Vector2=a.pos;var target:String=str(a.target);var dir:=Vector2.RIGHT
-        if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized()
-        _draw_army(pos,int(float(a.amount)),str(a.owner),dir)
+        if has_method("_draw_stream"):_draw_stream(a)
+        else:
+            var pos:Vector2=a.pos;var target:String=str(a.target);var dir:=Vector2.RIGHT
+            if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized()
+            _draw_army(pos,int(float(a.amount)),str(a.owner),dir)
     for flash in collision_flashes:
         var alpha:float=clampf(float(flash.life)/0.35,0.0,1.0);draw_circle(Vector2(flash.pos),18.0*(1.0-alpha)+7.0,Color(1.0,0.82,0.45,alpha*0.65),false,2.0)
 func _hit(pos:Vector2)->String:
@@ -348,24 +357,24 @@ func _gui_input(event:InputEvent)->void:
     if event is InputEventScreenTouch:
         if event.pressed:
             if touches.is_empty():suppress_single_touch=false
-            touches[event.index]=event.position;mouse_pos=event.position
+            touches[event.index]=event.position;mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0))
             if touches.size()==1 and not suppress_single_touch:drag_source=_player_source_at(event.position)
             elif touches.size()==2:_begin_camera_gesture()
             elif touches.size()>2:camera_gesture=false;suppress_single_touch=true;drag_source=""
         else:
-            var was_camera:bool=camera_gesture or suppress_single_touch;var release_pos:Vector2=event.position
+            var was_camera:bool=camera_gesture or suppress_single_touch;var release_pos:Vector2=event.position+Vector2(0.0,-64.0)
             if touches.has(event.index):touches.erase(event.index)
             if not was_camera and touches.is_empty() and drag_source!="":_send_army(drag_source,_hit(release_pos))
-            if touches.size()<2:camera_gesture=false;pinch_distance=0.0;pinch_midpoint=Vector2.ZERO;drag_source=""
+            if touches.size()<2:camera_gesture=false;pinch_distance=0.0;pinch_midpoint=Vector2.ZERO;drag_source="";aim_target=""
             if touches.is_empty():suppress_single_touch=false
     elif event is InputEventScreenDrag:
         if touches.has(event.index):touches[event.index]=event.position
-        mouse_pos=event.position
+        mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0)) if touches.size()==1 else ""
         if touches.size()==2 and camera_gesture:_update_camera_gesture()
     elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
         mouse_pos=event.position
-        if event.pressed:mouse_down=true;drag_source=_player_source_at(event.position)
+        if event.pressed:mouse_down=true;drag_source=_player_source_at(event.position);aim_target=_hit(event.position+Vector2(0.0,-64.0))
         else:
-            if mouse_down and drag_source!="":_send_army(drag_source,_hit(event.position))
-            mouse_down=false;drag_source=""
-    elif event is InputEventMouseMotion and mouse_down:mouse_pos=event.position;queue_redraw()
+            if mouse_down and drag_source!="":_send_army(drag_source,_hit(event.position+Vector2(0.0,-64.0)))
+            mouse_down=false;drag_source="";aim_target=""
+    elif event is InputEventMouseMotion and mouse_down:mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0));queue_redraw()

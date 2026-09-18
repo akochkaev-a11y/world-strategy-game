@@ -47,6 +47,9 @@ func _army_tail(a:Dictionary)->Vector2:
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
     pass
 
+func _draw_army_entry(a:Dictionary)->void:
+    _draw_stream(a)
+
 func _draw_stream(a:Dictionary)->void:
     var amount:int=int(float(a.amount))
     if amount<=0:return

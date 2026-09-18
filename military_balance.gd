@@ -5,6 +5,7 @@ var player_country := ""
 var refresh_clock := 0.0
 var ranking: Array = []
 var totals: Dictionary = {}
+var territory_counts: Dictionary = {}
 
 const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония"}
 const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
@@ -29,12 +30,14 @@ func _process(delta: float) -> void:
 func _refresh() -> void:
     if not world_map or not is_instance_valid(world_map): return
     totals.clear()
+    territory_counts.clear()
     ranking.clear()
     for iso in world_map.territories.keys():
         var t: Dictionary = world_map.territories[iso]
         var owner: String = str(t.owner)
         if owner == "NEUTRAL": continue
         totals[owner] = int(totals.get(owner, 0)) + int(float(t.army))
+        territory_counts[owner] = int(territory_counts.get(owner, 0)) + 1
     for a in world_map.armies:
         var owner: String = str(a.owner)
         if owner != "NEUTRAL": totals[owner] = int(totals.get(owner, 0)) + int(float(a.amount))
@@ -59,6 +62,7 @@ func _draw() -> void:
     for i in range(count):
         var owner: String = str(ranking[i])
         var total: int = int(totals.get(owner,0))
+        var lands: int = int(territory_counts.get(owner,0))
         var x: float = pad + float(i) * (cell_w + gap)
         var rect := Rect2(Vector2(x,8.0),Vector2(cell_w,64.0))
         var player: bool = owner == player_country
@@ -72,7 +76,7 @@ func _draw() -> void:
         var flag: String = str(FLAGS.get(owner,""))
         var color: Color = Color(1.0,0.84,0.34) if player else Color(0.92,0.96,0.99)
         draw_string(ThemeDB.fallback_font,Vector2(x,32),flag,HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),20,Color.WHITE)
-        draw_string(ThemeDB.fallback_font,Vector2(x,58),str(total),HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),17,color)
+        draw_string(ThemeDB.fallback_font,Vector2(x,55),"%d  •  %d тер." % [total,lands],HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),15,color)
         if cell_w >= 92.0:
             var name: String = str(NAMES.get(owner,owner))
             draw_string(ThemeDB.fallback_font,Vector2(x,71),name,HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),10,Color(0.64,0.73,0.80))

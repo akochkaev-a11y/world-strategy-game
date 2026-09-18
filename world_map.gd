@@ -211,13 +211,16 @@ func _draw()->void:
         if route.size()>=2:
             var tip:Vector2=route[route.size()-1];var back:Vector2=route[route.size()-2];var dir:Vector2=(tip-back).normalized();var side:Vector2=Vector2(-dir.y,dir.x);var head:=PackedVector2Array([tip,tip-dir*28.0+side*14.0,tip-dir*28.0-side*14.0]);draw_colored_polygon(head,Color(route_color.r*0.55+0.45,route_color.g*0.55+0.45,route_color.b*0.55+0.45,0.92))
     for a in armies:
-        if has_method("_draw_stream"):_draw_stream(a)
-        else:
-            var pos:Vector2=a.pos;var target:String=str(a.target);var dir:=Vector2.RIGHT
-            if feature_centers.has(target):dir=(Vector2(feature_centers[target])-pos).normalized()
-            _draw_army(pos,int(float(a.amount)),str(a.owner),dir)
+        _draw_army_entry(a)
     for flash in collision_flashes:
         var alpha:float=clampf(float(flash.life)/0.35,0.0,1.0);draw_circle(Vector2(flash.pos),18.0*(1.0-alpha)+7.0,Color(1.0,0.82,0.45,alpha*0.65),false,2.0)
+func _draw_army_entry(a:Dictionary)->void:
+    var pos:Vector2=Vector2(a.pos);var target:String=str(a.target);var dir:Vector2=Vector2.RIGHT
+    if feature_centers.has(target):
+        var delta:Vector2=Vector2(feature_centers[target])-pos
+        if delta.length_squared()>0.01:dir=delta.normalized()
+    _draw_army(pos,int(float(a.amount)),str(a.owner),dir)
+
 func _hit(pos:Vector2)->String:
     for iso in hit_polygons.keys():
         if not PLAYABLE_IDS.has(str(iso)):continue

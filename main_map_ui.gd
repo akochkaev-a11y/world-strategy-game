@@ -135,7 +135,7 @@ func _show_multiplayer_menu() -> void:
     box.add_child(name_field)
     server_field = LineEdit.new()
     server_field.placeholder_text = "wss://адрес-сервера"
-    server_field.text = "ws://127.0.0.1:8080"
+    server_field.text = "ws://87.228.13.236:8080"
     server_field.custom_minimum_size = Vector2(560,50)
     box.add_child(server_field)
     var create := Button.new()

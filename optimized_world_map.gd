@@ -24,28 +24,22 @@ func _safe_anchor(poly:PackedVector2Array)->Vector2:
             if distance<best_distance:best_distance=distance;best=p
     return best
 
-func _route_point(a:Dictionary,t:float)->Vector2:
-    var fallback:Vector2=Vector2.ZERO
-    if a.has("pos"):
-        fallback=Vector2(a["pos"])
-    var start:Vector2=Vector2(a.get("start",fallback))
-    var finish:Vector2=Vector2(a.get("finish",fallback))
-    var control:Vector2=Vector2(a.get("control",(start+finish)*0.5))
-    var u:float=1.0-clampf(t,0.0,1.0)
-    var tt:float=clampf(t,0.0,1.0)
-    return u*u*start+2.0*u*tt*control+tt*tt*finish
+func _stream_point(a:Dictionary,t:float)->Vector2:
+    var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
+    if not feature_centers.has(source) or not feature_centers.has(target):return Vector2.ZERO
+    return _screen_route_point(Vector2(feature_centers[source]),Vector2(feature_centers[target]),t,zoom)
 
 func _army_direction(a:Dictionary)->Vector2:
     var t:float=clampf(float(a.get("progress",0.0)),0.0,1.0)
-    var p0:Vector2=_route_point(a,maxf(0.0,t-0.01))
-    var p1:Vector2=_route_point(a,minf(1.0,t+0.01))
+    var p0:Vector2=_stream_point(a,maxf(0.0,t-0.01))
+    var p1:Vector2=_stream_point(a,minf(1.0,t+0.01))
     var d:Vector2=p1-p0
     return d.normalized() if d.length_squared()>0.01 else Vector2.RIGHT
 
 func _army_tail(a:Dictionary)->Vector2:
     var visible:int=mini(int(float(a.amount)),MAX_VISIBLE_UNITS)
     var step:float=UNIT_SPACING/maxf(1.0,float(a.get("route_length",1.0)))
-    return _route_point(a,maxf(0.0,float(a.get("progress",0.0))-step*float(maxi(0,visible-1))))
+    return _stream_point(a,maxf(0.0,float(a.get("progress",0.0))-step*float(maxi(0,visible-1))))
 
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
     pass
@@ -54,49 +48,39 @@ func _draw_army_entry(a:Dictionary)->void:
     _draw_stream(a)
 
 func _draw_stream(a:Dictionary)->void:
+    var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
+    if not feature_centers.has(source) or not feature_centers.has(target):return
+    var color:Color=_owner_color(str(a.get("owner","NEUTRAL")));var route:PackedVector2Array=_curve_points(Vector2(feature_centers[source]),Vector2(feature_centers[target]),zoom)
+    for route_i in range(route.size()-1):draw_line(route[route_i],route[route_i+1],Color(color.r,color.g,color.b,0.16),2.2,true)
     if multiplayer_mode:
-        var source:String=str(a.get("source",""))
-        var target:String=str(a.get("target",""))
-        if feature_centers.has(source) and feature_centers.has(target):
-            var start:Vector2=Vector2(feature_centers[source])
-            var finish:Vector2=Vector2(feature_centers[target])
-            var d:Vector2=finish-start
-            var side:Vector2=Vector2(-d.y,d.x).normalized()
-            var control:Vector2=(start+finish)*0.5+side*minf(42.0,d.length()*0.11)
-            a["start"]=start
-            a["finish"]=finish
-            a["control"]=control
-            a["route_length"]=maxf(1.0,float(a.get("route_length",start.distance_to(control)+control.distance_to(finish))))
-            var units:Array=Array(a.get("units",[]))
-            if not units.is_empty():
-                var color:Color=_owner_color(str(a.get("owner","NEUTRAL")))
-                var first:int=maxi(0,units.size()-MAX_VISIBLE_UNITS)
-                for i in range(first,units.size()):
-                    var p:Vector2=_route_point(a,float(units[i]))
-                    draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
-                    draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
-                return
+        var units:Array=Array(a.get("units",[]))
+        if not units.is_empty():
+            var first:int=maxi(0,units.size()-MAX_VISIBLE_UNITS)
+            for i in range(first,units.size()):
+                var p:Vector2=_stream_point(a,float(units[i]))
+                draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
+                draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
+            return
     var amount:int=int(float(a.get("amount",0.0)))
     if amount<=0:return
     var visible:int=mini(amount,MAX_VISIBLE_UNITS)
-    var color:Color=_owner_color(str(a.get("owner","NEUTRAL")))
     var progress:float=float(a.get("progress",0.0))
     var step:float=UNIT_SPACING/maxf(1.0,float(a.get("route_length",1.0)))
     for i in range(visible):
         var t:float=maxf(0.0,progress-step*float(i))
-        var p:Vector2=_route_point(a,t)
+        var p:Vector2=_stream_point(a,t)
         draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
         draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
 
 func _segments_touch(a:Dictionary,b:Dictionary)->bool:
-    var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b)
+    var a0:Vector2=_stream_point(a,float(a.get("progress",0.0)));var a1:Vector2=_army_tail(a);var b0:Vector2=_stream_point(b,float(b.get("progress",0.0)));var b1:Vector2=_army_tail(b)
     var crossing:Variant=Geometry2D.segment_intersects_segment(a0,a1,b0,b1)
     if crossing!=null:return true
     var limit_sq:float=(UNIT_RADIUS*2.4)*(UNIT_RADIUS*2.4)
     return _segment_distance_squared(a0,b0,b1)<=limit_sq or _segment_distance_squared(a1,b0,b1)<=limit_sq or _segment_distance_squared(b0,a0,a1)<=limit_sq or _segment_distance_squared(b1,a0,a1)<=limit_sq
 
 func _collision_point(a:Dictionary,b:Dictionary)->Vector2:
-    var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b);var crossing:Variant=Geometry2D.segment_intersects_segment(a0,a1,b0,b1)
+    var a0:Vector2=_stream_point(a,float(a.get("progress",0.0)));var a1:Vector2=_army_tail(a);var b0:Vector2=_stream_point(b,float(b.get("progress",0.0)));var b1:Vector2=_army_tail(b);var crossing:Variant=Geometry2D.segment_intersects_segment(a0,a1,b0,b1)
     if crossing is Vector2:return Vector2(crossing)
     return (a0+b0)*0.5
 
@@ -119,9 +103,9 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
     var free:float=maxf(0.0,float(src.army)-_reserved_from(from_iso))
     var requested:float=floor(free*share)
-    if requested<1.0 or not feature_centers.has(from_iso):return
-    var start:Vector2=Vector2(feature_centers[from_iso]);var finish:Vector2=Vector2(feature_centers[to_iso]);var d:Vector2=finish-start;var side:Vector2=Vector2(-d.y,d.x).normalized();var control:Vector2=(start+finish)*0.5+side*minf(42.0,d.length()*0.11);var route_len:float=maxf(1.0,start.distance_to(control)+control.distance_to(finish))
-    armies.append({"owner":str(src.owner),"amount":0.0,"pending":requested,"emit_clock":EMIT_INTERVAL,"source":from_iso,"pos":start,"start":start,"finish":finish,"control":control,"route_length":route_len,"progress":0.0,"target":to_iso})
+    if requested<1.0 or not feature_centers.has(from_iso) or not feature_centers.has(to_iso):return
+    var start:Vector2=Vector2(feature_centers[from_iso]);var finish:Vector2=Vector2(feature_centers[to_iso]);var route_len:float=_route_length(start,finish,zoom)/maxf(zoom,0.001)
+    armies.append({"owner":str(src.owner),"amount":0.0,"pending":requested,"emit_clock":EMIT_INTERVAL,"source":from_iso,"route_length":route_len,"progress":0.0,"target":to_iso})
 
 func _send_amount(from_iso:String,to_iso:String,amount:float)->void:
     if not territories.has(from_iso):return
@@ -158,13 +142,13 @@ func _move_armies(delta:float)->void:
     if multiplayer_mode:return
     for i in range(armies.size()-1,-1,-1):
         if i>=armies.size():continue
-        var a:Dictionary=armies[i];var target:String=str(a.target)
-        if not PLAYABLE_IDS.has(target) or not feature_centers.has(target):armies.remove_at(i);continue
+        var a:Dictionary=armies[i];var source:String=str(a.get("source",""));var target:String=str(a.target)
+        if not PLAYABLE_IDS.has(source) or not PLAYABLE_IDS.has(target) or not feature_centers.has(source) or not feature_centers.has(target):armies.remove_at(i);continue
         _emit_units(a,delta)
         if float(a.amount)<=0.0:continue
         var route_len:float=maxf(1.0,float(a.get("route_length",1.0)))
         var progress:float=minf(1.0,float(a.get("progress",0.0))+ARMY_SPEED*delta/route_len)
-        a["progress"]=progress;a.pos=_route_point(a,progress)
+        a["progress"]=progress
         if progress>=1.0:
             a["arrival_clock"]=float(a.get("arrival_clock",0.0))+delta;_resolve_arrival_stream(i)
     _resolve_line_collisions(delta)
@@ -182,7 +166,7 @@ func _resolve_arrival_stream(index:int)->void:
         t.army=float(t.army)+1.0
     elif float(t.army)>0.0:
         t.army=maxf(0.0,float(t.army)-1.0)
-        collision_flashes.append({"pos":Vector2(a.pos),"life":0.18})
+        collision_flashes.append({"map_pos":_screen_to_map(_stream_point(a,1.0)),"life":0.18})
     else:
         t.owner=owner;t.army=1.0
     if float(a.amount)<=0.0 and float(a.get("pending",0.0))<=0.0:armies.remove_at(index)
@@ -197,7 +181,7 @@ func _resolve_line_collisions(delta:float)->void:
                 var key:String=str(i)+":"+str(j)
                 active_keys[key]=true;field_combat_clock[key]=float(field_combat_clock.get(key,0.0))+delta
                 if float(field_combat_clock[key])>=FIELD_KILL_INTERVAL:
-                    field_combat_clock[key]=float(field_combat_clock[key])-FIELD_KILL_INTERVAL;armies[i].amount=float(armies[i].amount)-1.0;armies[j].amount=float(armies[j].amount)-1.0;collision_flashes.append({"pos":_collision_point(armies[i],armies[j]),"life":0.16})
+                    field_combat_clock[key]=float(field_combat_clock[key])-FIELD_KILL_INTERVAL;armies[i].amount=float(armies[i].amount)-1.0;armies[j].amount=float(armies[j].amount)-1.0;collision_flashes.append({"map_pos":_screen_to_map(_collision_point(armies[i],armies[j])),"life":0.16})
                     if float(armies[j].amount)<=0.0:armies.remove_at(j);continue
                     if float(armies[i].amount)<=0.0:armies.remove_at(i);i-=1;break
             j+=1

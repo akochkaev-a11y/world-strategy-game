@@ -273,7 +273,7 @@ func _route_control(a:Vector2,b:Vector2,bend_scale:float=1.0)->Vector2:
     if d.length_squared()<=0.0001:return (a+b)*0.5
     var side:Vector2=Vector2(-d.y,d.x).normalized()
     return (a+b)*0.5+side*minf(42.0*bend_scale,d.length()*0.11)
-func _route_point(a:Vector2,b:Vector2,t:float,bend_scale:float=1.0)->Vector2:
+func _screen_route_point(a:Vector2,b:Vector2,t:float,bend_scale:float=1.0)->Vector2:
     var q:float=clampf(t,0.0,1.0);var u:float=1.0-q;var control:Vector2=_route_control(a,b,bend_scale)
     return u*u*a+2.0*u*q*control+q*q*b
 func _route_direction(a:Vector2,b:Vector2,t:float,bend_scale:float=1.0)->Vector2:
@@ -284,7 +284,7 @@ func _route_length(a:Vector2,b:Vector2,bend_scale:float=1.0)->float:
     return maxf(1.0,a.distance_to(control)+control.distance_to(b))
 func _curve_points(a:Vector2,b:Vector2,bend_scale:float=1.0)->PackedVector2Array:
     var points:=PackedVector2Array()
-    for i in range(21):points.append(_route_point(a,b,float(i)/20.0,bend_scale))
+    for i in range(21):points.append(_screen_route_point(a,b,float(i)/20.0,bend_scale))
     return points
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
     if amount<=0:return
@@ -328,18 +328,18 @@ func _draw_army_entry(a:Dictionary)->void:
     if a.has("units"):
         var units:Array=Array(a.get("units",[]));var lead_progress:float=0.0
         for unit_raw in units:
-            var unit_progress:float=clampf(float(unit_raw),0.0,1.0);lead_progress=maxf(lead_progress,unit_progress);var unit_pos:Vector2=_route_point(start,finish,unit_progress,zoom)
+            var unit_progress:float=clampf(float(unit_raw),0.0,1.0);lead_progress=maxf(lead_progress,unit_progress);var unit_pos:Vector2=_screen_route_point(start,finish,unit_progress,zoom)
             draw_circle(unit_pos,4.2,Color(color.r,color.g,color.b,0.10));draw_circle(unit_pos,2.2,Color(color.r,color.g,color.b,0.96))
         if not units.is_empty():
-            var lead:Vector2=_route_point(start,finish,lead_progress,zoom);draw_string_outline(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,3,Color(0,0,0,0.9));draw_string(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,Color.WHITE)
+            var lead:Vector2=_screen_route_point(start,finish,lead_progress,zoom);draw_string_outline(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,3,Color(0,0,0,0.9));draw_string(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,Color.WHITE)
         return
-    var army_progress:float=clampf(float(a.get("progress",0.0)),0.0,1.0);var pos:Vector2=_route_point(start,finish,army_progress,zoom);var dir:Vector2=_route_direction(start,finish,army_progress,zoom)
+    var army_progress:float=clampf(float(a.get("progress",0.0)),0.0,1.0);var pos:Vector2=_screen_route_point(start,finish,army_progress,zoom);var dir:Vector2=_route_direction(start,finish,army_progress,zoom)
     _draw_army(pos,int(float(a.get("amount",0.0))),str(a.get("owner","")),dir)
 
 func _army_map_position(a:Dictionary)->Vector2:
     var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
     if not feature_centers.has(source) or not feature_centers.has(target):return Vector2.ZERO
-    var screen_pos:Vector2=_route_point(Vector2(feature_centers[source]),Vector2(feature_centers[target]),float(a.get("progress",0.0)),zoom)
+    var screen_pos:Vector2=_screen_route_point(Vector2(feature_centers[source]),Vector2(feature_centers[target]),float(a.get("progress",0.0)),zoom)
     return _screen_to_map(screen_pos)
 
 func _hit(pos:Vector2)->String:

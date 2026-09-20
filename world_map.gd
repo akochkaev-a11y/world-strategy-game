@@ -237,7 +237,7 @@ func _scaled_poly(poly:PackedVector2Array,center:Vector2,scale:float)->PackedVec
     for p in poly:out.append(center+(p-center)*scale)
     return out
 func _owner_color(owner:String)->Color:
-    var c:Dictionary={"RU":Color(0.10,0.42,0.96),"UA":Color(0.98,0.72,0.08),"PL":Color(0.94,0.16,0.36),"FR":Color(0.10,0.68,0.94),"DE":Color(0.62,0.24,0.88),"GB":Color(0.12,0.72,0.48),"CN":Color(0.94,0.18,0.10),"IN":Color(1.0,0.43,0.06),"IR":Color(0.06,0.55,0.25),"JP":Color(0.94,0.34,0.68)};return c.get(owner,Color(0.055,0.065,0.072))
+    var c:Dictionary={"RU":Color(0.10,0.42,0.96),"UA":Color(0.98,0.72,0.08),"PL":Color(0.94,0.16,0.36),"FR":Color(0.10,0.68,0.94),"DE":Color(0.62,0.24,0.88),"GB":Color(0.12,0.72,0.48),"CN":Color(0.94,0.18,0.10),"IN":Color(1.0,0.43,0.06),"IR":Color(0.06,0.55,0.25),"JP":Color(0.94,0.34,0.68),"US":Color(0.18,0.48,0.92),"CA":Color(0.92,0.18,0.22),"MX":Color(0.05,0.62,0.34),"BR":Color(0.12,0.72,0.30),"AR":Color(0.32,0.68,0.94)};return c.get(owner,Color(0.055,0.065,0.072))
 func _draw_sea()->void:
     draw_rect(Rect2(Vector2.ZERO,size),Color(0.004,0.014,0.027));var center:=size*Vector2(0.57,0.47);var max_r:float=maxf(size.x,size.y)*0.86
     for i in range(12,0,-1):var f:float=float(i)/12.0;draw_circle(center,max_r*f,Color(0.025,0.105,0.155,0.012+(1.0-f)*0.012))

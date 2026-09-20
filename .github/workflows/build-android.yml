@@ -86,7 +86,7 @@ jobs:
               raise SystemExit(f'geometry validation failed: count={len(found)} found={sorted(found)}')
           print('Bundled playable geometry count:', len(found))
           PY
-          test -s eurasia_countries.json
+          test -s world_countries.json
 
       - name: Setup Godot
         shell: bash

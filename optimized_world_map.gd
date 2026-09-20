@@ -60,13 +60,23 @@ func _draw_stream(a:Dictionary)->void:
             var d:Vector2=finish-start
             var side:Vector2=Vector2(-d.y,d.x).normalized()
             var control:Vector2=(start+finish)*0.5+side*minf(42.0,d.length()*0.11)
-            a["start"]=start;a["finish"]=finish;a["control"]=control
-            a["route_length"]=maxf(1.0,start.distance_to(control)+control.distance_to(finish))
-            a["pos"]=_route_point(a,float(a.get("progress",0.0)))
-    var amount:int=int(float(a.amount))
+            a["start"]=start
+            a["finish"]=finish
+            a["control"]=control
+            a["route_length"]=maxf(1.0,float(a.get("route_length",start.distance_to(control)+control.distance_to(finish))))
+            var units:Array=Array(a.get("units",[]))
+            if not units.is_empty():
+                var color:Color=_owner_color(str(a.get("owner","NEUTRAL")))
+                var first:int=maxi(0,units.size()-MAX_VISIBLE_UNITS)
+                for i in range(first,units.size()):
+                    var p:Vector2=_route_point(a,float(units[i]))
+                    draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
+                    draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
+                return
+    var amount:int=int(float(a.get("amount",0.0)))
     if amount<=0:return
     var visible:int=mini(amount,MAX_VISIBLE_UNITS)
-    var color:Color=_owner_color(str(a.owner))
+    var color:Color=_owner_color(str(a.get("owner","NEUTRAL")))
     var progress:float=float(a.get("progress",0.0))
     var step:float=UNIT_SPACING/maxf(1.0,float(a.get("route_length",1.0)))
     for i in range(visible):
@@ -74,7 +84,6 @@ func _draw_stream(a:Dictionary)->void:
         var p:Vector2=_route_point(a,t)
         draw_circle(p,UNIT_RADIUS+2.0,Color(color.r,color.g,color.b,0.10))
         draw_circle(p,UNIT_RADIUS,Color(color.r,color.g,color.b,0.96))
-
 
 func _segments_touch(a:Dictionary,b:Dictionary)->bool:
     var a0:Vector2=Vector2(a.pos);var a1:Vector2=_army_tail(a);var b0:Vector2=Vector2(b.pos);var b1:Vector2=_army_tail(b)

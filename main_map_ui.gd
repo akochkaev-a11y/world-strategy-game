@@ -115,6 +115,7 @@ func _show_country_chooser() -> void:
 
 func _show_multiplayer_menu() -> void:
     _clear_frontend()
+    _ensure_multiplayer_client()
     multiplayer_panel = _make_full_panel()
     var center := CenterContainer.new()
     center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -139,6 +140,12 @@ func _show_multiplayer_menu() -> void:
     server_field.text = "ws://87.228.13.236:8080"
     server_field.custom_minimum_size = Vector2(560,50)
     box.add_child(server_field)
+    if multiplayer_client.has_saved_session():
+        var resume := Button.new()
+        resume.text = "ВЕРНУТЬСЯ В ПАРТИЮ"
+        resume.custom_minimum_size = Vector2(560,58)
+        resume.pressed.connect(_resume_multiplayer_room)
+        box.add_child(resume)
     var create := Button.new()
     create.text = "СОЗДАТЬ КОМНАТУ"
     create.custom_minimum_size = Vector2(560,58)
@@ -175,6 +182,11 @@ func _ensure_multiplayer_client() -> void:
     multiplayer_client.game_result.connect(_on_multiplayer_result)
     multiplayer_client.status_changed.connect(_on_multiplayer_status)
 
+func _resume_multiplayer_room() -> void:
+    _ensure_multiplayer_client()
+    lobby_status.text = "Возвращаюсь в комнату..."
+    multiplayer_client.resume_saved_session()
+
 func _create_room() -> void:
     _ensure_multiplayer_client()
     lobby_status.text = "Подключение..."
@@ -191,6 +203,15 @@ func _on_multiplayer_status(text: String) -> void:
 
 func _on_room_state_changed(state: Dictionary) -> void:
     room_state = state.duplicate(true)
+    selected_country = ""
+    var players:Array = room_state.get("players",[])
+    for p_raw in players:
+        if typeof(p_raw) != TYPE_DICTIONARY:
+            continue
+        var p:Dictionary = p_raw
+        if str(p.get("id","")) == str(multiplayer_client.player_id):
+            selected_country = str(p.get("country",""))
+            break
     _show_lobby()
 
 func _show_lobby() -> void:
@@ -276,6 +297,8 @@ func _on_multiplayer_game_started(state: Dictionary) -> void:
             selected_country = str(p.get("country",""))
             break
     if selected_country == "":
+        return
+    if started and multiplayer_game:
         return
     _start_game(selected_country,true)
 

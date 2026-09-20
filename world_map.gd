@@ -130,10 +130,28 @@ func _process(delta:float)->void:
     if game_over:return
     if multiplayer_mode:
         anim_time+=delta
+        _advance_multiplayer_visuals(delta)
         _update_collision_flashes(delta)
         queue_redraw()
         return
     var sim_delta:float=delta*time_scale;anim_time+=sim_delta;_move_armies(sim_delta);_update_ai(sim_delta);_update_collision_flashes(sim_delta);queue_redraw()
+func _advance_multiplayer_visuals(delta:float)->void:
+    for a in armies:
+        var route_length:float=maxf(1.0,float(a.get("route_length",1.0)))
+        var dp:float=ARMY_SPEED*delta/route_length
+        if a.has("units"):
+            var units:Array=Array(a.get("units",[]))
+            var max_progress:float=0.0
+            for i in range(units.size()):
+                var p:float=minf(1.0,float(units[i])+dp)
+                units[i]=p
+                max_progress=maxf(max_progress,p)
+            a["units"]=units
+            a["amount"]=units.size()
+            a["progress"]=max_progress
+        else:
+            a["progress"]=minf(1.0,float(a.get("progress",0.0))+dp)
+
 func _update_ai(delta:float)->void:
     for owner in ACTIVE_IDS:
         var id:String=str(owner)

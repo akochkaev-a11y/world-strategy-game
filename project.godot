@@ -3,6 +3,11 @@ config/name="Geostrategy v0.1"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.3")
 config/icon="res://assets/icons/geostrategy_icon_master.png"
+boot_splash/bg_color=Color(0.00392157, 0.0196078, 0.0392157, 1)
+boot_splash/image="res://assets/splash/geostrategy_boot_splash.jpg"
+boot_splash/fullsize=true
+boot_splash/use_filter=true
+boot_splash/show_image=true
 
 [display]
 window/size/viewport_width=1280

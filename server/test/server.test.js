@@ -56,8 +56,9 @@ async function connect(port) {
 test("authoritative game owns growth, AI assignments, movement, collisions and capture",()=>{
   const room=fakeRoom(["RU"]);
   const game=room.game;
-  assert.equal(ACTIVE.length,15);
-  assert.equal(Object.keys(game.territories).length,54);
+  assert.equal(ACTIVE.length,16);
+  assert.equal(Object.keys(game.territories).length,55);
+  assert.equal(game.territories.PT.owner,"PT");
   assert.equal(game.territories.US.owner,"US");
   assert.equal(game.territories.BR.owner,"BR");
   assert.equal(game.territories.CL.owner,"NEUTRAL");

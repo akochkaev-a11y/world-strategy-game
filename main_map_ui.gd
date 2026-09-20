@@ -1,12 +1,12 @@
 extends Control
 
-const ACTIVE_ORDER := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","US","CA","MX","BR","AR"]
+const ACTIVE_ORDER := ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","US","CA","MX","BR","AR"]
 const ACTIVE_COUNTRIES := {
     "RU":"Россия", "UA":"Украина", "PL":"Польша", "FR":"Франция", "DE":"Германия",
-    "GB":"Великобритания", "CN":"Китай", "IN":"Индия", "IR":"Иран", "JP":"Япония",
+    "GB":"Великобритания", "PT":"Португалия", "CN":"Китай", "IN":"Индия", "IR":"Иран", "JP":"Япония",
     "US":"США", "CA":"Канада", "MX":"Мексика", "BR":"Бразилия", "AR":"Аргентина"
 }
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
+const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","PT":"🇵🇹","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
 
 var world_map: Control
 var military_balance: Control

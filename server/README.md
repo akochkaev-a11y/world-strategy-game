@@ -19,6 +19,7 @@ The default port is `8080` and can be overridden with `PORT`.
 - Lobby commands: `create_room`, `join_room`, `select_country`, `start_room`.
 - A successful create/join returns a persistent `session` with `session_token`.
 - `reconnect` accepts the room code and the same token, including after a match starts.
+- `leave_room` revokes the saved seat and prevents later reconnection with that token.
 - Player orders use `send_army` with `source`, `target`, and `share`.
 - `army_started` makes a new stream visible immediately.
 - Authoritative `game_state` snapshots contain revision, server timer, players,

@@ -1,6 +1,7 @@
 extends Control
 
 signal army_order_requested(from_iso:String,to_iso:String,share:float)
+signal exit_requested
 
 const GEOJSON_PATH := "res://eurasia_countries.json"
 const LON_MIN := -12.0
@@ -379,7 +380,10 @@ func _show_end_overlay(title_text:String,subtitle_text:String)->void:
     var box:=VBoxContainer.new();box.custom_minimum_size=Vector2(520,250);box.alignment=BoxContainer.ALIGNMENT_CENTER;center.add_child(box)
     var title:=Label.new();title.text=title_text;title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;title.add_theme_font_size_override("font_size",42);box.add_child(title)
     var sub:=Label.new();sub.text=subtitle_text;sub.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER;sub.add_theme_font_size_override("font_size",18);box.add_child(sub)
-    var button:=Button.new();button.text="НАЧАТЬ ЗАНОВО";button.custom_minimum_size=Vector2(320,60);button.add_theme_font_size_override("font_size",20);button.pressed.connect(_restart);box.add_child(button)
+    var button:=Button.new();button.text="ВЫЙТИ В МЕНЮ" if multiplayer_mode else "НАЧАТЬ ЗАНОВО";button.custom_minimum_size=Vector2(320,60);button.add_theme_font_size_override("font_size",20)
+    if multiplayer_mode:button.pressed.connect(func():exit_requested.emit())
+    else:button.pressed.connect(_restart)
+    box.add_child(button)
 func _restart()->void:get_tree().reload_current_scene()
 func _projected_at(owner:String,target_iso:String)->float:
     var total:float=0.0
@@ -437,37 +441,4 @@ func _update_camera_gesture()->void:
     var a:Vector2=pair[0];var b:Vector2=pair[1];var midpoint:Vector2=(a+b)*0.5;var distance:float=a.distance_to(b)
     if pinch_distance<=0.0:pinch_distance=distance;pinch_midpoint=midpoint;return
     var old_zoom:float=zoom;var new_zoom:float=clampf(old_zoom*distance/pinch_distance,1.0,2.8);var new_pan:Vector2=pan+(midpoint-pinch_midpoint)
-    if old_zoom>0.0 and not is_equal_approx(new_zoom,old_zoom):var focus:Vector2=pinch_midpoint-size*0.5-pan;new_pan-=focus*(new_zoom/old_zoom-1.0)
-    zoom=new_zoom
-    if zoom<=1.001:zoom=1.0;pan=Vector2.ZERO
-    else:pan=_clamp_pan(new_pan,zoom)
-    pinch_distance=distance;pinch_midpoint=midpoint;queue_redraw()
-func _gui_input(event:InputEvent)->void:
-    if game_over or local_player_eliminated:return
-    if event is InputEventScreenTouch:
-        accept_event()
-        if event.pressed:
-            if touches.is_empty():suppress_single_touch=false
-            touches[event.index]=event.position;mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0))
-            if touches.size()==1 and not suppress_single_touch:drag_source=_player_source_at(event.position)
-            elif touches.size()==2:_begin_camera_gesture()
-            elif touches.size()>2:camera_gesture=false;suppress_single_touch=true;drag_source=""
-        else:
-            var was_camera:bool=camera_gesture or suppress_single_touch;var release_pos:Vector2=event.position+Vector2(0.0,-64.0)
-            if touches.has(event.index):touches.erase(event.index)
-            if not was_camera and touches.is_empty() and drag_source!="":_send_army(drag_source,_hit(release_pos))
-            if touches.size()<2:camera_gesture=false;pinch_distance=0.0;pinch_midpoint=Vector2.ZERO;drag_source="";aim_target=""
-            if touches.is_empty():suppress_single_touch=false
-        queue_redraw()
-    elif event is InputEventScreenDrag:
-        accept_event()
-        if touches.has(event.index):touches[event.index]=event.position
-        mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0)) if touches.size()==1 else ""
-        if touches.size()==2 and camera_gesture:_update_camera_gesture()
-    elif event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
-        mouse_pos=event.position
-        if event.pressed:mouse_down=true;drag_source=_player_source_at(event.position);aim_target=_hit(event.position+Vector2(0.0,-64.0))
-        else:
-            if mouse_down and drag_source!="":_send_army(drag_source,_hit(event.position+Vector2(0.0,-64.0)))
-            mouse_down=false;drag_source="";aim_target=""
-    elif event is InputEventMouseMotion and mouse_down:mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0));queue_redraw()
+    if old_zoom>0.0 a

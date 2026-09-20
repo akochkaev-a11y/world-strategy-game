@@ -157,7 +157,14 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   const rejected=await stranger.box.take(message=>message.type==="error");
   assert.match(rejected.message,/началась/);
 
-  resumed.ws.close();
+  resumed.ws.send(JSON.stringify({type:"leave_room"}));
+  await resumed.box.take(message=>message.type==="left_room");
+  const revoked=await connect(port);
+  revoked.ws.send(JSON.stringify({type:"reconnect",code:firstSession.code,session_token:firstSession.session_token}));
+  const revokedError=await revoked.box.take(message=>message.type==="error");
+  assert.match(revokedError.message,/не найдена/);
+
+  revoked.ws.close();
   second.ws.close();
   stranger.ws.close();
 });

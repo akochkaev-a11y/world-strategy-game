@@ -27,6 +27,7 @@ var start_button: Button
 var selected_country: String = ""
 var room_state: Dictionary = {}
 var multiplayer_game: bool = false
+var exit_button: Button
 
 func _ready() -> void:
     _show_mode_chooser()
@@ -279,6 +280,11 @@ func _show_lobby() -> void:
     info.text = "%d игрок(ов) в комнате" % players.size()
     info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     box.add_child(info)
+    var leave := Button.new()
+    leave.text = "ВЫЙТИ ИЗ КОМНАТЫ"
+    leave.custom_minimum_size = Vector2(420,52)
+    leave.pressed.connect(_leave_multiplayer_room)
+    box.add_child(leave)
 
 func _select_multiplayer_country(iso: String) -> void:
     selected_country = iso
@@ -317,6 +323,7 @@ func _start_game(selected: String, multiplayer: bool = false) -> void:
     if multiplayer_game:
         world_map.set_multiplayer_mode(true)
         world_map.army_order_requested.connect(_on_multiplayer_army_order)
+        world_map.exit_requested.connect(_exit_to_menu)
     military_balance = preload("res://military_balance.gd").new()
     add_child(military_balance)
     military_balance.setup(world_map,selected)
@@ -330,6 +337,13 @@ func _start_game(selected: String, multiplayer: bool = false) -> void:
     timer_label.add_theme_constant_override("shadow_offset_x",2)
     timer_label.add_theme_constant_override("shadow_offset_y",2)
     add_child(timer_label)
+    exit_button = Button.new()
+    exit_button.text = "ВЫЙТИ"
+    exit_button.custom_minimum_size = Vector2(104,48)
+    exit_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+    exit_button.position = Vector2(-116,16) if multiplayer_game else Vector2(-204,16)
+    exit_button.pressed.connect(_exit_to_menu)
+    add_child(exit_button)
     match_time = 0.0
     army_clock = 0.0
     _update_timer()
@@ -386,3 +400,13 @@ func _on_multiplayer_snapshot(state:Dictionary)->void:
 func _on_multiplayer_result(winner:String)->void:
     if multiplayer_game and is_instance_valid(world_map):
         world_map.show_multiplayer_result(winner)
+
+func _exit_to_menu()->void:
+    if multiplayer_game and is_instance_valid(multiplayer_client):
+        multiplayer_client.leave_room()
+    get_tree().reload_current_scene()
+
+func _leave_multiplayer_room()->void:
+    if is_instance_valid(multiplayer_client):
+        multiplayer_client.leave_room()
+    get_tree().reload_current_scene()

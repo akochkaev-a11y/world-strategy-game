@@ -6,6 +6,7 @@ signal army_started(army: Dictionary, server_time: float)
 signal country_eliminated(country: String)
 signal game_snapshot(state: Dictionary)
 signal game_result(winner: String)
+signal left_room
 signal status_changed(text: String)
 
 const SESSION_PATH := "user://multiplayer_session.cfg"
@@ -59,6 +60,19 @@ func select_country(iso: String) -> void:
 
 func start_room() -> void:
     _send({"type":"start_room"})
+
+func leave_room() -> void:
+    if socket.get_ready_state()==WebSocketPeer.STATE_OPEN:
+        socket.send_text(JSON.stringify({"type":"leave_room"}))
+    auto_reconnect=false
+    pending_action.clear()
+    _clear_saved_session()
+    if socket.get_ready_state()==WebSocketPeer.STATE_OPEN or socket.get_ready_state()==WebSocketPeer.STATE_CONNECTING:
+        socket.close(1000,"left_room")
+    connected=false
+    reconnect_wait=-1.0
+    set_process(false)
+    left_room.emit()
 
 func send_army(from_iso:String,to_iso:String,share:float=0.5)->void:
     _send({"type":"send_army","source":from_iso,"target":to_iso,"share":share})
@@ -196,5 +210,9 @@ func _handle_message(message_text: String) -> void:
             game_snapshot.emit(state)
     elif msg_type=="game_over":
         game_result.emit(str(msg.get("winner","")))
+    elif msg_type=="left_room":
+        auto_reconnect=false
+        _clear_saved_session()
+        left_room.emit()
     elif msg_type=="error":
         status_changed.emit(str(msg.get("message","Ошибка сервера")))

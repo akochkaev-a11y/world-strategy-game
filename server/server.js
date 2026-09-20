@@ -488,6 +488,24 @@ wss.on("connection",ws=>{
 
     if (!room||!player) return error(ws,"Сначала создайте комнату или войдите в неё.");
 
+    if (msg.type==="leave_room") {
+      const leavingToken=player.token;
+      room.players.delete(leavingToken);
+      send(ws,{type:"left_room"});
+      if(!room.started) {
+        if(room.players.size===0) rooms.delete(room.code);
+        else {
+          if(room.hostToken===leavingToken) room.hostToken=room.players.keys().next().value;
+          broadcastRoom(room);
+        }
+      } else if(room.game) {
+        sendSnapshot(room);
+      }
+      room=null;
+      player=null;
+      return;
+    }
+
     if (msg.type==="select_country") {
       if (room.started) return error(ws,"Партия уже началась.");
       const country=String(msg.country||"");

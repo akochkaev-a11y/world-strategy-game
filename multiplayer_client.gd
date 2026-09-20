@@ -8,6 +8,7 @@ var socket := WebSocketPeer.new()
 var pending_action: Dictionary = {}
 var player_id: String = ""
 var connected: bool = false
+var connection_started_msec: int = 0
 
 func create_room(url: String, player_name: String) -> void:
     pending_action = {"type":"create_room","name":_safe_name(player_name)}
@@ -37,6 +38,8 @@ func _connect(url: String) -> void:
         status_changed.emit("Не удалось начать подключение.")
         return
     connected = false
+    connection_started_msec = Time.get_ticks_msec()
+    status_changed.emit("Соединяюсь с сервером...")
     set_process(true)
 
 func _process(_delta: float) -> void:
@@ -55,8 +58,15 @@ func _process(_delta: float) -> void:
     elif state == WebSocketPeer.STATE_CLOSED:
         if connected:
             status_changed.emit("Соединение с сервером закрыто.")
+        else:
+            status_changed.emit("Не удалось подключиться к серверу.")
         connected = false
         set_process(false)
+    elif state == WebSocketPeer.STATE_CONNECTING:
+        if connection_started_msec > 0 and Time.get_ticks_msec() - connection_started_msec > 10000:
+            status_changed.emit("Сервер не отвечает. Проверьте адрес и порт 8080.")
+            socket.close()
+            set_process(false)
 
 func _send(payload: Dictionary) -> void:
     if socket.get_ready_state() != WebSocketPeer.STATE_OPEN:

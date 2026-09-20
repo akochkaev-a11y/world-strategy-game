@@ -34,24 +34,23 @@ jobs:
           apt-get install -y --no-install-recommends python3 ca-certificates
           python3 --version
 
-      - name: Download and validate country boundaries
+      - name: Validate bundled country boundaries
         shell: bash
         run: |
           set -e
           python3 - <<'PY'
           import json
-          import urllib.request
           from pathlib import Path
 
-          url = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
-          with urllib.request.urlopen(url, timeout=30) as response:
-              Path('/tmp/all_countries.geojson').write_bytes(response.read())
+          path = Path('eurasia_countries.json')
+          if not path.is_file() or path.stat().st_size == 0:
+              raise SystemExit('Missing bundled eurasia_countries.json')
 
           wanted = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM"]
           wanted_set = set(wanted)
           a3 = {"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
-          data = json.loads(Path('/tmp/all_countries.geojson').read_text())
-          selected = {}
+          data = json.loads(path.read_text())
+          found = []
           for feature in data.get('features', []):
               p = feature.get('properties') or {}
               iso = p.get('ISO_A2')
@@ -61,17 +60,11 @@ jobs:
                   iso = a3.get(p.get('ADM0_A3'), '')
               geom = feature.get('geometry') or {}
               if iso in wanted_set and geom.get('type') in ('Polygon','MultiPolygon'):
-                  if iso in selected:
-                      raise SystemExit(f'duplicate playable country geometry: {iso}')
-                  selected[iso] = feature
-          missing = wanted_set - set(selected)
-          extra = set(selected) - wanted_set
-          if missing or extra or len(selected) != 30:
-              raise SystemExit(f'geometry validation failed: count={len(selected)} missing={sorted(missing)} extra={sorted(extra)}')
-          out = {'type':'FeatureCollection','features':[selected[iso] for iso in wanted]}
-          Path('eurasia_countries.json').write_text(json.dumps(out, separators=(',',':')))
-          print('Validated playable geometries:', ','.join(wanted))
-          print('Playable geometry count:', len(out['features']))
+                  found.append(iso)
+
+          if len(found) != 30 or set(found) != wanted_set or len(found) != len(set(found)):
+              raise SystemExit(f'geometry validation failed: count={len(found)} found={sorted(found)}')
+          print('Bundled playable geometry count:', len(found))
           PY
           test -s eurasia_countries.json
 

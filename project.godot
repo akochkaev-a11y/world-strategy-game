@@ -2,6 +2,7 @@
 config/name="Geostrategy v0.1"
 run/main_scene="res://Main.tscn"
 config/features=PackedStringArray("4.3")
+config/icon="res://assets/icons/geostrategy_icon_master.png"
 
 [display]
 window/size/viewport_width=1280

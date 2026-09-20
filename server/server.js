@@ -13,9 +13,10 @@ const UNIT_RADIUS = 3.2;
 const EMIT_INTERVAL = UNIT_SPACING / ARMY_SPEED;
 const COLLISION_RADIUS = UNIT_RADIUS * 2.25;
 const AI_RESERVE = 30;
-const ACTIVE = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP"];
-const PLAYABLE = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI"];
-const LON_MIN=-12, LON_MAX=150, LAT_MIN=5, LAT_MAX=76;
+const ACTIVE = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","US","CA","MX","BR","AR"];
+const AMERICAS = ["CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"];
+const PLAYABLE = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI",...AMERICAS];
+const LON_MIN=-180, LON_MAX=180, LAT_MIN=-60, LAT_MAX=85;
 const rooms = new Map();
 let nextArmyId = 1;
 
@@ -84,7 +85,7 @@ function safeAnchor(poly) {
 }
 const centers={};
 try {
-  const geo=JSON.parse(fs.readFileSync(path.join(__dirname,"..","eurasia_countries.json"),"utf8"));
+  const geo=JSON.parse(fs.readFileSync(path.join(__dirname,"..","world_countries.json"),"utf8"));
   for (const f of geo.features||[]) {
     const iso=isoOf(f);
     if (!PLAYABLE.includes(iso)) continue;

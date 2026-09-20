@@ -3,17 +3,18 @@ extends Control
 signal army_order_requested(from_iso:String,to_iso:String,share:float)
 signal exit_requested
 
-const GEOJSON_PATH := "res://eurasia_countries.json"
-const LON_MIN := -12.0
-const LON_MAX := 150.0
-const LAT_MIN := 5.0
-const LAT_MAX := 76.0
-const ACTIVE_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP"]
+const GEOJSON_PATH := "res://world_countries.json"
+const LON_MIN := -180.0
+const LON_MAX := 180.0
+const LAT_MIN := -60.0
+const LAT_MAX := 85.0
+const ACTIVE_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","US","CA","MX","BR","AR"]
 const BACKGROUND_IDS := ["ID","MY","TH","MM","VN","YE","OM"]
-const PLAYABLE_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI"]
-const MAP_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM"]
-const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония"}
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
+const AMERICA_IDS := ["CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"]
+const PLAYABLE_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI"] + AMERICA_IDS
+const MAP_IDS := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM"] + AMERICA_IDS
+const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония","US":"США","CA":"Канада","MX":"Мексика","BR":"Бразилия","AR":"Аргентина"}
+const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
 const START_ARMY := 100.0
 const ARMY_SPEED := 110.0
 const AI_RESERVE := 30.0
@@ -134,7 +135,7 @@ func _load_geojson()->void:
         seen[iso]=true;map_features.append(feature)
     for iso in MAP_IDS:
         if not seen.has(iso):push_error("Missing map geometry: "+str(iso))
-    if map_features.size()!=MAP_IDS.size():push_error("Map geometry count must be exactly 30, got "+str(map_features.size()))
+    if map_features.size()!=MAP_IDS.size():push_error("Map geometry count mismatch, expected "+str(MAP_IDS.size())+", got "+str(map_features.size()))
 func _ensure_territories()->void:
     territories.clear();growth_fraction.clear()
     if map_features.size()!=MAP_IDS.size():return
@@ -142,7 +143,7 @@ func _ensure_territories()->void:
         var iso:String=_feature_iso(feature.get("properties",{}))
         if not PLAYABLE_IDS.has(iso) or territories.has(iso):continue
         territories[iso]={"owner":iso if ACTIVE_IDS.has(iso) else "NEUTRAL","army":START_ARMY};growth_fraction[iso]=0.0
-    if territories.size()!=23:push_error("Territory count must be exactly 23, got "+str(territories.size()));territories.clear()
+    if territories.size()!=PLAYABLE_IDS.size():push_error("Territory count mismatch, expected "+str(PLAYABLE_IDS.size())+", got "+str(territories.size()));territories.clear()
 func grow_armies()->void:
     if multiplayer_mode:return
     if game_over:return
@@ -441,7 +442,7 @@ func _update_camera_gesture()->void:
     if pair.size()!=2:return
     var a:Vector2=pair[0];var b:Vector2=pair[1];var midpoint:Vector2=(a+b)*0.5;var distance:float=a.distance_to(b)
     if pinch_distance<=0.0:pinch_distance=distance;pinch_midpoint=midpoint;return
-    var old_zoom:float=zoom;var new_zoom:float=clampf(old_zoom*distance/pinch_distance,1.0,2.8);var new_pan:Vector2=pan+(midpoint-pinch_midpoint)
+    var old_zoom:float=zoom;var new_zoom:float=clampf(old_zoom*distance/pinch_distance,1.0,4.0);var new_pan:Vector2=pan+(midpoint-pinch_midpoint)
     if old_zoom>0.0 and not is_equal_approx(new_zoom,old_zoom):var focus:Vector2=pinch_midpoint-size*0.5-pan;new_pan-=focus*(new_zoom/old_zoom-1.0)
     zoom=new_zoom
     if zoom<=1.001:zoom=1.0;pan=Vector2.ZERO

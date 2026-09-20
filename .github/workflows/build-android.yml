@@ -62,11 +62,11 @@ jobs:
           import json
           from pathlib import Path
 
-          path = Path('eurasia_countries.json')
+          path = Path('world_countries.json')
           if not path.is_file() or path.stat().st_size == 0:
-              raise SystemExit('Missing bundled eurasia_countries.json')
+              raise SystemExit('Missing bundled world_countries.json')
 
-          wanted = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM"]
+          wanted = ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM","CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"]
           wanted_set = set(wanted)
           a3 = {"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
           data = json.loads(path.read_text())
@@ -82,7 +82,7 @@ jobs:
               if iso in wanted_set and geom.get('type') in ('Polygon','MultiPolygon'):
                   found.append(iso)
 
-          if len(found) != 30 or set(found) != wanted_set or len(found) != len(set(found)):
+          if len(found) != len(wanted) or set(found) != wanted_set or len(found) != len(set(found)):
               raise SystemExit(f'geometry validation failed: count={len(found)} found={sorted(found)}')
           print('Bundled playable geometry count:', len(found))
           PY

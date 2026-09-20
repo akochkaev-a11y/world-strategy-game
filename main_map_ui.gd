@@ -1,11 +1,12 @@
 extends Control
 
-const ACTIVE_ORDER := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP"]
+const ACTIVE_ORDER := ["RU","UA","PL","FR","DE","GB","CN","IN","IR","JP","US","CA","MX","BR","AR"]
 const ACTIVE_COUNTRIES := {
     "RU":"Россия", "UA":"Украина", "PL":"Польша", "FR":"Франция", "DE":"Германия",
-    "GB":"Великобритания", "CN":"Китай", "IN":"Индия", "IR":"Иран", "JP":"Япония"
+    "GB":"Великобритания", "CN":"Китай", "IN":"Индия", "IR":"Иран", "JP":"Япония",
+    "US":"США", "CA":"Канада", "MX":"Мексика", "BR":"Бразилия", "AR":"Аргентина"
 }
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵"}
+const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
 
 var world_map: Control
 var military_balance: Control
@@ -92,7 +93,7 @@ func _show_country_chooser() -> void:
     title.add_theme_font_size_override("font_size",34)
     box.add_child(title)
     var subtitle := Label.new()
-    subtitle.text = "Ведите страну к господству на карте Евразии"
+    subtitle.text = "Ведите страну к господству на карте мира"
     subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     subtitle.modulate = Color(0.72,0.80,0.88)
     subtitle.add_theme_font_size_override("font_size",17)

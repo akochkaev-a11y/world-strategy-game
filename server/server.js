@@ -128,10 +128,12 @@ function makeGame(room) {
     armies:[],
     aiTimers,
     aiCountries:[...Object.keys(aiTimers)],
+    eliminatedCountries:new Set(),
     elapsed:0,
     snapshotClock:0,
     winner:"",
-    onArmyStarted:null
+    onArmyStarted:null,
+    onCountryEliminated:null
   };
 }
 function publicRoom(room) {
@@ -156,6 +158,7 @@ function snapshot(room) {
     phase:g.winner?"finished":"running",
     time:g.elapsed,
     winner:g.winner,
+    eliminated_countries:[...g.eliminatedCountries],
     players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws&&p.ws.readyState===WebSocket.OPEN})),
     ai_countries:g.aiCountries.slice(),
     territories,
@@ -382,6 +385,18 @@ function checkWinner(room) {
   }
 }
 
+function checkEliminations(room) {
+  const g=room.game;
+  for(const country of ACTIVE) {
+    if(g.eliminatedCountries.has(country)) continue;
+    const ownsTerritory=Object.values(g.territories).some(t=>t.owner===country);
+    const hasMovingArmy=g.armies.some(a=>a.owner===country&&(a.pending>0||a.units.length>0));
+    if(ownsTerritory||hasMovingArmy) continue;
+    g.eliminatedCountries.add(country);
+    if(typeof g.onCountryEliminated==="function") g.onCountryEliminated(country);
+  }
+}
+
 function tickRoom(room,dt) {
   const g=room.game;
   if (!g||g.winner) return;
@@ -404,6 +419,7 @@ function tickRoom(room,dt) {
   resolveUnitCollisions(g);
   resolveArrivals(g);
   g.armies=g.armies.filter(a=>a.pending>0||a.units.length>0);
+  checkEliminations(room);
   checkWinner(room);
   g.snapshotClock+=dt;
   if (g.snapshotClock>=SNAPSHOT_MS/1000){
@@ -489,6 +505,7 @@ wss.on("connection",ws=>{
       room.started=true;
       room.game=makeGame(room);
       room.game.onArmyStarted=army=>broadcast(room,{type:"army_started",server_time:room.game.elapsed,army});
+      room.game.onCountryEliminated=country=>broadcast(room,{type:"country_eliminated",country,server_time:room.game.elapsed});
       sendGameStarted(room);
       return sendSnapshot(room);
     }
@@ -544,6 +561,7 @@ module.exports={
   ACTIVE,
   PLAYABLE,
   addArmy,
+  checkEliminations,
   checkWinner,
   makeGame,
   resolveArrivals,

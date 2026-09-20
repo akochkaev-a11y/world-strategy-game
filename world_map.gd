@@ -44,6 +44,8 @@ var time_scale:=1.0
 var speed_button:Button
 var multiplayer_mode:bool=false
 var multiplayer_result_shown:bool=false
+var local_player_eliminated:bool=false
+var elimination_notice:Control
 
 func setup(_data:Dictionary,selected:String)->void:
     player_country=selected;_load_geojson();_ensure_territories();_reset_ai_timers();game_started=territories.size()==PLAYABLE_IDS.size();queue_redraw()
@@ -93,6 +95,22 @@ func show_multiplayer_result(winner:String)->void:
         _show_end_overlay("ВЫ ПОБЕДИЛИ","Ваша держава осталась последней")
     else:
         _show_end_overlay("ВЫ ПРОИГРАЛИ","Победитель: "+str(NAMES.get(winner,winner)))
+
+func show_multiplayer_defeat()->void:
+    if local_player_eliminated:return
+    local_player_eliminated=true
+    elimination_notice=PanelContainer.new()
+    elimination_notice.set_anchors_preset(Control.PRESET_CENTER_TOP)
+    elimination_notice.position=Vector2(-230.0,72.0)
+    elimination_notice.custom_minimum_size=Vector2(460.0,88.0)
+    elimination_notice.mouse_filter=Control.MOUSE_FILTER_IGNORE
+    var label:=Label.new()
+    label.text="ВЫ ПРОИГРАЛИ\nБой остальных держав продолжается"
+    label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+    label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+    label.add_theme_font_size_override("font_size",20)
+    elimination_notice.add_child(label)
+    add_child(elimination_notice)
 func _feature_iso(props:Dictionary)->String:
     var iso:String=str(props.get("ISO_A2",""))
     if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
@@ -425,7 +443,7 @@ func _update_camera_gesture()->void:
     else:pan=_clamp_pan(new_pan,zoom)
     pinch_distance=distance;pinch_midpoint=midpoint;queue_redraw()
 func _gui_input(event:InputEvent)->void:
-    if game_over:return
+    if game_over or local_player_eliminated:return
     if event is InputEventScreenTouch:
         accept_event()
         if event.pressed:

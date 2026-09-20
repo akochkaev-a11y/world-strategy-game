@@ -6,6 +6,7 @@ const WebSocket = require("ws");
 const {
   ACTIVE,
   addArmy,
+  checkEliminations,
   checkWinner,
   makeGame,
   resolveArrivals,
@@ -87,6 +88,16 @@ test("authoritative game owns growth, AI assignments, movement, collisions and c
   resolveArrivals(game);
   assert.equal(game.territories.UA.owner,"RU");
   assert.equal(game.territories.UA.army,1);
+
+  const eliminated=[];
+  game.onCountryEliminated=country=>eliminated.push(country);
+  for(const territory of Object.values(game.territories)) {
+    if(territory.owner==="DE") territory.owner="CN";
+  }
+  game.armies=game.armies.filter(army=>army.owner!=="DE");
+  checkEliminations(room);
+  assert.ok(eliminated.includes("DE"));
+  assert.equal(game.winner,"");
 
   for(const country of ACTIVE) game.territories[country].owner="RU";
   game.armies=[];

@@ -3,6 +3,7 @@ extends Node
 signal room_state_changed(state: Dictionary)
 signal game_started(state: Dictionary)
 signal army_started(army: Dictionary, server_time: float)
+signal country_eliminated(country: String)
 signal game_snapshot(state: Dictionary)
 signal game_result(winner: String)
 signal status_changed(text: String)
@@ -184,6 +185,8 @@ func _handle_message(message_text: String) -> void:
         game_started.emit(start_state)
     elif msg_type=="army_started":
         army_started.emit(Dictionary(msg.get("army",{})),float(msg.get("server_time",0.0)))
+    elif msg_type=="country_eliminated":
+        country_eliminated.emit(str(msg.get("country","")))
     elif msg_type=="game_state":
         var state:Dictionary=Dictionary(msg.get("state",{}))
         state["local_country"]=str(msg.get("player_country",""))

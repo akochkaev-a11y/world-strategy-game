@@ -179,6 +179,7 @@ func _ensure_multiplayer_client() -> void:
     multiplayer_client.room_state_changed.connect(_on_room_state_changed)
     multiplayer_client.game_started.connect(_on_multiplayer_game_started)
     multiplayer_client.army_started.connect(_on_multiplayer_army_started)
+    multiplayer_client.country_eliminated.connect(_on_multiplayer_country_eliminated)
     multiplayer_client.game_snapshot.connect(_on_multiplayer_snapshot)
     multiplayer_client.game_result.connect(_on_multiplayer_result)
     multiplayer_client.status_changed.connect(_on_multiplayer_status)
@@ -365,6 +366,10 @@ func _on_multiplayer_army_started(army:Dictionary,_server_time:float)->void:
     if multiplayer_game and is_instance_valid(world_map):
         world_map.apply_multiplayer_army_started(army)
 
+func _on_multiplayer_country_eliminated(country:String)->void:
+    if multiplayer_game and country==selected_country and is_instance_valid(world_map):
+        world_map.show_multiplayer_defeat()
+
 func _on_multiplayer_snapshot(state:Dictionary)->void:
     if not multiplayer_game or not is_instance_valid(world_map):
         var snapshot_country:String=str(state.get("local_country",selected_country))
@@ -373,6 +378,9 @@ func _on_multiplayer_snapshot(state:Dictionary)->void:
         _start_game(selected_country,true)
     match_time=float(state.get("time",match_time))
     world_map.apply_multiplayer_state(state)
+    var eliminated:Array=Array(state.get("eliminated_countries",[]))
+    if eliminated.has(selected_country):
+        world_map.show_multiplayer_defeat()
     _update_timer()
 
 func _on_multiplayer_result(winner:String)->void:

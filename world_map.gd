@@ -189,7 +189,11 @@ func _update_ai(delta:float)->void:
             _ai_decide(id);ai_timers[id]=randf_range(5.0,15.0)
 func _base_project(lon:float,lat:float)->Vector2:return Vector2((lon-LON_MIN)/(LON_MAX-LON_MIN)*size.x,(LAT_MAX-lat)/(LAT_MAX-LAT_MIN)*size.y)
 func _project(lon:float,lat:float)->Vector2:
-    var c:Vector2=size*0.5;return c+(_base_project(lon,lat)-c)*zoom+pan
+    return _map_to_screen(_base_project(lon,lat))
+func _map_to_screen(point:Vector2)->Vector2:
+    var c:Vector2=size*0.5;return c+(point-c)*zoom+pan
+func _screen_to_map(point:Vector2)->Vector2:
+    var c:Vector2=size*0.5;return c+(point-c-pan)/maxf(zoom,0.001)
 func _rings(feature:Dictionary)->Array:
     var g:Dictionary=feature.get("geometry",{});var coords:Array=g.get("coordinates",[]);var out:Array=[]
     if str(g.get("type",""))=="Polygon" and not coords.is_empty():out.append(coords[0])
@@ -264,9 +268,23 @@ func _draw_marker(iso:String,center:Vector2)->void:
     if show_name:
         var title:String=str(NAMES.get(iso,""));draw_string_outline(ThemeDB.fallback_font,c+Vector2(-w*0.5,10),title,HORIZONTAL_ALIGNMENT_CENTER,w,13,3,Color(0,0,0,0.96));draw_string(ThemeDB.fallback_font,c+Vector2(-w*0.5,10),title,HORIZONTAL_ALIGNMENT_CENTER,w,13,Color(0.94,0.97,1.0))
     var cy:float=30.0 if show_name else 19.0;draw_string_outline(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy),count,HORIZONTAL_ALIGNMENT_CENTER,w,18,4,Color(0,0,0,0.96));draw_string(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy),count,HORIZONTAL_ALIGNMENT_CENTER,w,18,Color.WHITE)
-func _curve_points(a:Vector2,b:Vector2)->PackedVector2Array:
-    var points:=PackedVector2Array();var d:Vector2=b-a;var side:Vector2=Vector2(-d.y,d.x).normalized();var control:Vector2=(a+b)*0.5+side*minf(42.0,d.length()*0.11)
-    for i in range(21):var t:float=float(i)/20.0;points.append((1.0-t)*(1.0-t)*a+2.0*(1.0-t)*t*control+t*t*b)
+func _route_control(a:Vector2,b:Vector2,bend_scale:float=1.0)->Vector2:
+    var d:Vector2=b-a
+    if d.length_squared()<=0.0001:return (a+b)*0.5
+    var side:Vector2=Vector2(-d.y,d.x).normalized()
+    return (a+b)*0.5+side*minf(42.0*bend_scale,d.length()*0.11)
+func _route_point(a:Vector2,b:Vector2,t:float,bend_scale:float=1.0)->Vector2:
+    var q:float=clampf(t,0.0,1.0);var u:float=1.0-q;var control:Vector2=_route_control(a,b,bend_scale)
+    return u*u*a+2.0*u*q*control+q*q*b
+func _route_direction(a:Vector2,b:Vector2,t:float,bend_scale:float=1.0)->Vector2:
+    var q:float=clampf(t,0.0,1.0);var control:Vector2=_route_control(a,b,bend_scale);var tangent:Vector2=2.0*(1.0-q)*(control-a)+2.0*q*(b-control)
+    return tangent.normalized() if tangent.length_squared()>0.0001 else Vector2.RIGHT
+func _route_length(a:Vector2,b:Vector2,bend_scale:float=1.0)->float:
+    var control:Vector2=_route_control(a,b,bend_scale)
+    return maxf(1.0,a.distance_to(control)+control.distance_to(b))
+func _curve_points(a:Vector2,b:Vector2,bend_scale:float=1.0)->PackedVector2Array:
+    var points:=PackedVector2Array()
+    for i in range(21):points.append(_route_point(a,b,float(i)/20.0,bend_scale))
     return points
 func _draw_army(center:Vector2,amount:int,owner:String,direction:Vector2)->void:
     if amount<=0:return
@@ -301,13 +319,28 @@ func _draw()->void:
     for a in armies:
         _draw_army_entry(a)
     for flash in collision_flashes:
-        var alpha:float=clampf(float(flash.life)/0.35,0.0,1.0);draw_circle(Vector2(flash.pos),18.0*(1.0-alpha)+7.0,Color(1.0,0.82,0.45,alpha*0.65),false,2.0)
+        var alpha:float=clampf(float(flash.life)/0.35,0.0,1.0);var flash_pos:Vector2=_map_to_screen(Vector2(flash.get("map_pos",Vector2.ZERO)));draw_circle(flash_pos,18.0*(1.0-alpha)+7.0,Color(1.0,0.82,0.45,alpha*0.65),false,2.0)
 func _draw_army_entry(a:Dictionary)->void:
-    var pos:Vector2=Vector2(a.pos);var target:String=str(a.target);var dir:Vector2=Vector2.RIGHT
-    if feature_centers.has(target):
-        var delta:Vector2=Vector2(feature_centers[target])-pos
-        if delta.length_squared()>0.01:dir=delta.normalized()
-    _draw_army(pos,int(float(a.amount)),str(a.owner),dir)
+    var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
+    if not feature_centers.has(source) or not feature_centers.has(target):return
+    var start:Vector2=Vector2(feature_centers[source]);var finish:Vector2=Vector2(feature_centers[target]);var route:PackedVector2Array=_curve_points(start,finish,zoom);var color:Color=_owner_color(str(a.get("owner","")))
+    for i in range(route.size()-1):draw_line(route[i],route[i+1],Color(color.r,color.g,color.b,0.16),2.2,true)
+    if a.has("units"):
+        var units:Array=Array(a.get("units",[]));var lead_progress:float=0.0
+        for unit_raw in units:
+            var unit_progress:float=clampf(float(unit_raw),0.0,1.0);lead_progress=maxf(lead_progress,unit_progress);var unit_pos:Vector2=_route_point(start,finish,unit_progress,zoom)
+            draw_circle(unit_pos,4.2,Color(color.r,color.g,color.b,0.10));draw_circle(unit_pos,2.2,Color(color.r,color.g,color.b,0.96))
+        if not units.is_empty():
+            var lead:Vector2=_route_point(start,finish,lead_progress,zoom);draw_string_outline(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,3,Color(0,0,0,0.9));draw_string(ThemeDB.fallback_font,lead+Vector2(-24,-18),str(units.size()),HORIZONTAL_ALIGNMENT_CENTER,48,13,Color.WHITE)
+        return
+    var army_progress:float=clampf(float(a.get("progress",0.0)),0.0,1.0);var pos:Vector2=_route_point(start,finish,army_progress,zoom);var dir:Vector2=_route_direction(start,finish,army_progress,zoom)
+    _draw_army(pos,int(float(a.get("amount",0.0))),str(a.get("owner","")),dir)
+
+func _army_map_position(a:Dictionary)->Vector2:
+    var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
+    if not feature_centers.has(source) or not feature_centers.has(target):return Vector2.ZERO
+    var screen_pos:Vector2=_route_point(Vector2(feature_centers[source]),Vector2(feature_centers[target]),float(a.get("progress",0.0)),zoom)
+    return _screen_to_map(screen_pos)
 
 func _hit(pos:Vector2)->String:
     for iso in hit_polygons.keys():
@@ -324,8 +357,9 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
     var src:Dictionary=territories[from_iso]
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
     var amount:float=floor(float(src.army)*share)
-    if amount<1.0 or not feature_centers.has(from_iso):return
-    src.army=float(src.army)-amount;armies.append({"owner":str(src.owner),"amount":amount,"pos":Vector2(feature_centers[from_iso]),"target":to_iso})
+    if amount<1.0 or not feature_centers.has(from_iso) or not feature_centers.has(to_iso):return
+    var start:Vector2=Vector2(feature_centers[from_iso]);var finish:Vector2=Vector2(feature_centers[to_iso]);var canonical_length:float=_route_length(start,finish,zoom)/maxf(zoom,0.001)
+    src.army=float(src.army)-amount;armies.append({"owner":str(src.owner),"amount":amount,"source":from_iso,"target":to_iso,"progress":0.0,"route_length":canonical_length})
 func _send_amount(from_iso:String,to_iso:String,amount:float)->void:
     if not territories.has(from_iso):return
     var available:float=float(territories[from_iso].army);var send:float=minf(floor(amount),floor(maxf(0.0,available-AI_RESERVE)))
@@ -334,19 +368,20 @@ func _send_amount(from_iso:String,to_iso:String,amount:float)->void:
 func _move_armies(delta:float)->void:
     for i in range(armies.size()-1,-1,-1):
         if i>=armies.size():continue
-        var a:Dictionary=armies[i];var target:String=str(a.target)
-        if not PLAYABLE_IDS.has(target) or not feature_centers.has(target):armies.remove_at(i);continue
-        var dest:Vector2=feature_centers[target];var pos:Vector2=a.pos
-        if pos.distance_to(dest)<=ARMY_SPEED*delta:_arrive(i);continue
-        a.pos=pos.move_toward(dest,ARMY_SPEED*delta)
+        var a:Dictionary=armies[i];var source:String=str(a.get("source",""));var target:String=str(a.get("target",""))
+        if not PLAYABLE_IDS.has(source) or not PLAYABLE_IDS.has(target) or not feature_centers.has(source) or not feature_centers.has(target):armies.remove_at(i);continue
+        var route_length:float=maxf(1.0,float(a.get("route_length",1.0)));var progress:float=float(a.get("progress",0.0))+ARMY_SPEED*delta/route_length
+        if progress>=1.0:_arrive(i);continue
+        a["progress"]=progress
     _resolve_collisions()
 func _resolve_collisions()->void:
     var i:int=0
     while i<armies.size():
         var j:int=i+1
         while j<armies.size():
-            if str(armies[i].owner)!=str(armies[j].owner) and Vector2(armies[i].pos).distance_to(Vector2(armies[j].pos))<=24.0:
-                var collision_pos:Vector2=(Vector2(armies[i].pos)+Vector2(armies[j].pos))*0.5;var loss:float=minf(float(armies[i].amount),float(armies[j].amount));collision_flashes.append({"pos":collision_pos,"life":0.35});armies[i].amount=float(armies[i].amount)-loss;armies[j].amount=float(armies[j].amount)-loss
+            var pos_i:Vector2=_army_map_position(armies[i]);var pos_j:Vector2=_army_map_position(armies[j])
+            if str(armies[i].owner)!=str(armies[j].owner) and pos_i.distance_to(pos_j)<=24.0:
+                var collision_pos:Vector2=(pos_i+pos_j)*0.5;var loss:float=minf(float(armies[i].amount),float(armies[j].amount));collision_flashes.append({"map_pos":collision_pos,"life":0.35});armies[i].amount=float(armies[i].amount)-loss;armies[j].amount=float(armies[j].amount)-loss
                 if float(armies[j].amount)<=0:armies.remove_at(j);continue
                 if float(armies[i].amount)<=0:armies.remove_at(i);i-=1;break
             j+=1

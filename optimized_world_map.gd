@@ -51,6 +51,18 @@ func _draw_army_entry(a:Dictionary)->void:
     _draw_stream(a)
 
 func _draw_stream(a:Dictionary)->void:
+    if multiplayer_mode:
+        var source:String=str(a.get("source",""))
+        var target:String=str(a.get("target",""))
+        if feature_centers.has(source) and feature_centers.has(target):
+            var start:Vector2=Vector2(feature_centers[source])
+            var finish:Vector2=Vector2(feature_centers[target])
+            var d:Vector2=finish-start
+            var side:Vector2=Vector2(-d.y,d.x).normalized()
+            var control:Vector2=(start+finish)*0.5+side*minf(42.0,d.length()*0.11)
+            a["start"]=start;a["finish"]=finish;a["control"]=control
+            a["route_length"]=maxf(1.0,start.distance_to(control)+control.distance_to(finish))
+            a["pos"]=_route_point(a,float(a.get("progress",0.0)))
     var amount:int=int(float(a.amount))
     if amount<=0:return
     var visible:int=mini(amount,MAX_VISIBLE_UNITS)
@@ -85,6 +97,11 @@ func _reserved_from(source_iso:String)->float:
     return total
 
 func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
+    if multiplayer_mode:
+        if game_over or ai or not PLAYABLE_IDS.has(from_iso) or not PLAYABLE_IDS.has(to_iso) or from_iso==to_iso:return
+        if not territories.has(from_iso) or str(territories[from_iso].owner)!=player_country:return
+        army_order_requested.emit(from_iso,to_iso,float(share))
+        return
     if game_over or not PLAYABLE_IDS.has(from_iso) or not PLAYABLE_IDS.has(to_iso) or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso):return
     var src:Dictionary=territories[from_iso]
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
@@ -126,6 +143,7 @@ func _emit_units(a:Dictionary,delta:float)->void:
         a["pending"]=float(a["pending"])-1.0
 
 func _move_armies(delta:float)->void:
+    if multiplayer_mode:return
     for i in range(armies.size()-1,-1,-1):
         if i>=armies.size():continue
         var a:Dictionary=armies[i];var target:String=str(a.target)

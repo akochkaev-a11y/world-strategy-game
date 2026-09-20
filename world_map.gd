@@ -1,5 +1,7 @@
 extends Control
 
+signal army_order_requested(from_iso:String,to_iso:String,share:float)
+
 const GEOJSON_PATH := "res://eurasia_countries.json"
 const LON_MIN := -12.0
 const LON_MAX := 150.0
@@ -40,6 +42,8 @@ var game_over:=false
 var game_started:=false
 var time_scale:=1.0
 var speed_button:Button
+var multiplayer_mode:bool=false
+var multiplayer_result_shown:bool=false
 
 func setup(_data:Dictionary,selected:String)->void:
     player_country=selected;_load_geojson();_ensure_territories();_reset_ai_timers();game_started=territories.size()==PLAYABLE_IDS.size();queue_redraw()
@@ -47,7 +51,39 @@ func _ready()->void:
     mouse_filter=Control.MOUSE_FILTER_STOP
     speed_button=Button.new();speed_button.text="×1";speed_button.custom_minimum_size=Vector2(72,48);speed_button.set_anchors_preset(Control.PRESET_TOP_RIGHT);speed_button.position=Vector2(-88,16);speed_button.add_theme_font_size_override("font_size",20);speed_button.pressed.connect(_toggle_speed);add_child(speed_button)
 func _toggle_speed()->void:
+    if multiplayer_mode:return
     time_scale=2.0 if time_scale<1.5 else 1.0;speed_button.text="×2" if time_scale>1.5 else "×1";speed_button.modulate=Color(1.0,0.82,0.32) if time_scale>1.5 else Color.WHITE
+
+func set_multiplayer_mode(enabled:bool)->void:
+    multiplayer_mode=enabled
+    time_scale=1.0
+    if is_instance_valid(speed_button):
+        speed_button.visible=not enabled
+
+func apply_multiplayer_state(state:Dictionary)->void:
+    if not multiplayer_mode:return
+    var remote_territories:Dictionary=Dictionary(state.get("territories",{}))
+    if not remote_territories.is_empty():
+        territories.clear()
+        for iso_raw in remote_territories.keys():
+            var iso:String=str(iso_raw)
+            var raw:Dictionary=Dictionary(remote_territories[iso_raw])
+            territories[iso]={"owner":str(raw.get("owner","NEUTRAL")),"army":float(raw.get("army",0.0))}
+    armies.clear()
+    var remote_armies:Array=Array(state.get("armies",[]))
+    for raw_army in remote_armies:
+        if typeof(raw_army)==TYPE_DICTIONARY:
+            armies.append(Dictionary(raw_army).duplicate(true))
+    queue_redraw()
+
+func show_multiplayer_result(winner:String)->void:
+    if multiplayer_result_shown:return
+    multiplayer_result_shown=true
+    game_over=true
+    if winner==player_country:
+        _show_end_overlay("ВЫ ПОБЕДИЛИ","Ваша держава осталась последней")
+    else:
+        _show_end_overlay("ВЫ ПРОИГРАЛИ","Победитель: "+str(NAMES.get(winner,winner)))
 func _feature_iso(props:Dictionary)->String:
     var iso:String=str(props.get("ISO_A2",""))
     if iso=="" or iso=="-99":iso=str(props.get("ISO_A2_EH",""))
@@ -80,6 +116,7 @@ func _ensure_territories()->void:
         territories[iso]={"owner":iso if ACTIVE_IDS.has(iso) else "NEUTRAL","army":START_ARMY};growth_fraction[iso]=0.0
     if territories.size()!=23:push_error("Territory count must be exactly 23, got "+str(territories.size()));territories.clear()
 func grow_armies()->void:
+    if multiplayer_mode:return
     if game_over:return
     for iso in territories.keys():
         var t:Dictionary=territories[iso];var base_rate:float=1.0 if str(t.owner)!="NEUTRAL" else 0.5;var rate:float=base_rate*time_scale;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate;var whole:int=int(floor(float(growth_fraction[iso])))
@@ -91,6 +128,11 @@ func _reset_ai_timers()->void:
         if str(owner)!=player_country:ai_timers[str(owner)]=randf_range(5.0,15.0)
 func _process(delta:float)->void:
     if game_over:return
+    if multiplayer_mode:
+        anim_time+=delta
+        _update_collision_flashes(delta)
+        queue_redraw()
+        return
     var sim_delta:float=delta*time_scale;anim_time+=sim_delta;_move_armies(sim_delta);_update_ai(sim_delta);_update_collision_flashes(sim_delta);queue_redraw()
 func _update_ai(delta:float)->void:
     for owner in ACTIVE_IDS:

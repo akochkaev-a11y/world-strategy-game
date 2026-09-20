@@ -26,6 +26,7 @@ var room_title: Label
 var start_button: Button
 var selected_country: String = ""
 var room_state: Dictionary = {}
+var multiplayer_game: bool = false
 
 func _ready() -> void:
     _show_mode_chooser()
@@ -170,6 +171,8 @@ func _ensure_multiplayer_client() -> void:
     add_child(multiplayer_client)
     multiplayer_client.room_state_changed.connect(_on_room_state_changed)
     multiplayer_client.game_started.connect(_on_multiplayer_game_started)
+    multiplayer_client.game_snapshot.connect(_on_multiplayer_snapshot)
+    multiplayer_client.game_result.connect(_on_multiplayer_result)
     multiplayer_client.status_changed.connect(_on_multiplayer_status)
 
 func _create_room() -> void:
@@ -274,14 +277,18 @@ func _on_multiplayer_game_started(state: Dictionary) -> void:
             break
     if selected_country == "":
         return
-    _start_game(selected_country)
+    _start_game(selected_country,true)
 
-func _start_game(selected: String) -> void:
+func _start_game(selected: String, multiplayer: bool = false) -> void:
     _clear_frontend()
     world_map = preload("res://optimized_world_map.gd").new()
     add_child(world_map)
     world_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     world_map.setup(ACTIVE_COUNTRIES,selected)
+    multiplayer_game = multiplayer
+    if multiplayer_game:
+        world_map.set_multiplayer_mode(true)
+        world_map.army_order_requested.connect(_on_multiplayer_army_order)
     military_balance = preload("res://military_balance.gd").new()
     add_child(military_balance)
     military_balance.setup(world_map,selected)
@@ -303,6 +310,9 @@ func _start_game(selected: String) -> void:
 func _process(delta: float) -> void:
     if not started:
         return
+    if multiplayer_game:
+        _update_timer()
+        return
     match_time += delta
     _update_timer()
     army_clock += delta
@@ -318,3 +328,18 @@ func _update_timer() -> void:
     var minutes: int = total_seconds / 60
     var seconds: int = total_seconds % 60
     timer_label.text = "%02d:%02d" % [minutes,seconds]
+
+
+func _on_multiplayer_army_order(from_iso:String,to_iso:String,share:float)->void:
+    if is_instance_valid(multiplayer_client):
+        multiplayer_client.send_army(from_iso,to_iso,share)
+
+func _on_multiplayer_snapshot(state:Dictionary)->void:
+    if not multiplayer_game or not is_instance_valid(world_map):return
+    match_time=float(state.get("time",match_time))
+    world_map.apply_multiplayer_state(state)
+    _update_timer()
+
+func _on_multiplayer_result(winner:String)->void:
+    if multiplayer_game and is_instance_valid(world_map):
+        world_map.show_multiplayer_result(winner)

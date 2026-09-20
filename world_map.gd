@@ -427,6 +427,7 @@ func _update_camera_gesture()->void:
 func _gui_input(event:InputEvent)->void:
     if game_over:return
     if event is InputEventScreenTouch:
+        accept_event()
         if event.pressed:
             if touches.is_empty():suppress_single_touch=false
             touches[event.index]=event.position;mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0))
@@ -439,7 +440,9 @@ func _gui_input(event:InputEvent)->void:
             if not was_camera and touches.is_empty() and drag_source!="":_send_army(drag_source,_hit(release_pos))
             if touches.size()<2:camera_gesture=false;pinch_distance=0.0;pinch_midpoint=Vector2.ZERO;drag_source="";aim_target=""
             if touches.is_empty():suppress_single_touch=false
+        queue_redraw()
     elif event is InputEventScreenDrag:
+        accept_event()
         if touches.has(event.index):touches[event.index]=event.position
         mouse_pos=event.position;aim_target=_hit(event.position+Vector2(0.0,-64.0)) if touches.size()==1 else ""
         if touches.size()==2 and camera_gesture:_update_camera_gesture()

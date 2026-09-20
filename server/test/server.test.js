@@ -117,6 +117,7 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   first.ws.send(JSON.stringify({type:"start_room"}));
   await first.box.take(message=>message.type==="game_started");
   const initial=await first.box.take(message=>message.type==="game_state");
+  assert.equal(initial.player_country,"RU");
   assert.equal(initial.state.players.length,2);
   assert.equal(initial.state.ai_countries.includes("RU"),false);
   assert.equal(initial.state.ai_countries.includes("DE"),false);
@@ -135,7 +136,8 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   const resumed=await connect(port);
   resumed.ws.send(JSON.stringify({type:"reconnect",code:firstSession.code,session_token:firstSession.session_token}));
   await resumed.box.take(message=>message.type==="session");
-  await resumed.box.take(message=>message.type==="game_started");
+  const resumedStart=await resumed.box.take(message=>message.type==="game_started");
+  assert.equal(resumedStart.player_country,"RU");
   const resumedState=await resumed.box.take(message=>message.type==="game_state");
   assert.equal(resumedState.state.players.find(p=>p.country==="RU").connected,true);
 

@@ -289,14 +289,17 @@ func _start_multiplayer_room() -> void:
 func _on_multiplayer_game_started(state: Dictionary) -> void:
     room_state = state.duplicate(true)
     var players: Array = room_state.get("players",[])
-    selected_country = ""
-    for p_raw in players:
-        if typeof(p_raw) != TYPE_DICTIONARY:
-            continue
-        var p: Dictionary = p_raw
-        if str(p.get("id","")) == str(multiplayer_client.player_id):
-            selected_country = str(p.get("country",""))
-            break
+    var server_country:String=str(room_state.get("local_country",""))
+    if server_country!="":
+        selected_country=server_country
+    else:
+        for p_raw in players:
+            if typeof(p_raw) != TYPE_DICTIONARY:
+                continue
+            var p: Dictionary = p_raw
+            if str(p.get("id","")) == str(multiplayer_client.player_id):
+                selected_country = str(p.get("country",""))
+                break
     if selected_country == "":
         return
     if started and multiplayer_game:
@@ -363,7 +366,11 @@ func _on_multiplayer_army_started(army:Dictionary,_server_time:float)->void:
         world_map.apply_multiplayer_army_started(army)
 
 func _on_multiplayer_snapshot(state:Dictionary)->void:
-    if not multiplayer_game or not is_instance_valid(world_map):return
+    if not multiplayer_game or not is_instance_valid(world_map):
+        var snapshot_country:String=str(state.get("local_country",selected_country))
+        if snapshot_country=="":return
+        selected_country=snapshot_country
+        _start_game(selected_country,true)
     match_time=float(state.get("time",match_time))
     world_map.apply_multiplayer_state(state)
     _update_timer()

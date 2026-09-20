@@ -172,7 +172,26 @@ function snapshot(room) {
     }))
   };
 }
-function sendSnapshot(room) { broadcast(room,{type:"game_state",state:snapshot(room)}); }
+function sendGameStarted(room,recipient=null) {
+  const state=publicRoom(room);
+  const deliver=player=>send(player.ws,{
+    type:"game_started",
+    player_country:player.country||"",
+    state
+  });
+  if(recipient) deliver(recipient);
+  else for(const player of room.players.values()) deliver(player);
+}
+function sendSnapshot(room,recipient=null) {
+  const state=snapshot(room);
+  const deliver=player=>send(player.ws,{
+    type:"game_state",
+    player_country:player.country||"",
+    state
+  });
+  if(recipient) deliver(recipient);
+  else for(const player of room.players.values()) deliver(player);
+}
 
 function publicArmy(army) {
   return {
@@ -442,8 +461,8 @@ wss.on("connection",ws=>{
       player.ws=ws;
       send(ws,{type:"session",player_id:player.id,session_token:player.token,code:room.code});
       if (room.started) {
-        send(ws,{type:"game_started",state:publicRoom(room)});
-        send(ws,{type:"game_state",state:snapshot(room)});
+        sendGameStarted(room,player);
+        sendSnapshot(room,player);
         if (room.game&&room.game.winner) send(ws,{type:"game_over",winner:room.game.winner});
       } else {
         broadcastRoom(room);
@@ -470,7 +489,7 @@ wss.on("connection",ws=>{
       room.started=true;
       room.game=makeGame(room);
       room.game.onArmyStarted=army=>broadcast(room,{type:"army_started",server_time:room.game.elapsed,army});
-      broadcast(room,{type:"game_started",state:publicRoom(room)});
+      sendGameStarted(room);
       return sendSnapshot(room);
     }
 
@@ -530,6 +549,8 @@ module.exports={
   resolveArrivals,
   resolveUnitCollisions,
   snapshot,
+  sendGameStarted,
+  sendSnapshot,
   startServer,
   tickRoom
 };

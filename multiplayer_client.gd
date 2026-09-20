@@ -179,11 +179,14 @@ func _handle_message(message_text: String) -> void:
     elif msg_type=="game_started":
         auto_reconnect=true
         last_game_revision=-1
-        game_started.emit(Dictionary(msg.get("state",{})))
+        var start_state:Dictionary=Dictionary(msg.get("state",{}))
+        start_state["local_country"]=str(msg.get("player_country",""))
+        game_started.emit(start_state)
     elif msg_type=="army_started":
         army_started.emit(Dictionary(msg.get("army",{})),float(msg.get("server_time",0.0)))
     elif msg_type=="game_state":
         var state:Dictionary=Dictionary(msg.get("state",{}))
+        state["local_country"]=str(msg.get("player_country",""))
         var revision:int=int(state.get("revision",last_game_revision+1))
         if revision>=last_game_revision:
             last_game_revision=revision

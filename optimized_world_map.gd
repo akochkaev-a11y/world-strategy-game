@@ -25,8 +25,11 @@ func _safe_anchor(poly:PackedVector2Array)->Vector2:
     return best
 
 func _route_point(a:Dictionary,t:float)->Vector2:
-    var start:Vector2=Vector2(a.get("start",a.pos))
-    var finish:Vector2=Vector2(a.get("finish",a.pos))
+    var fallback:Vector2=Vector2.ZERO
+    if a.has("pos"):
+        fallback=Vector2(a["pos"])
+    var start:Vector2=Vector2(a.get("start",fallback))
+    var finish:Vector2=Vector2(a.get("finish",fallback))
     var control:Vector2=Vector2(a.get("control",(start+finish)*0.5))
     var u:float=1.0-clampf(t,0.0,1.0)
     var tt:float=clampf(t,0.0,1.0)

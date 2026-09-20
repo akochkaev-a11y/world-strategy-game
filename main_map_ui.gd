@@ -178,6 +178,7 @@ func _ensure_multiplayer_client() -> void:
     add_child(multiplayer_client)
     multiplayer_client.room_state_changed.connect(_on_room_state_changed)
     multiplayer_client.game_started.connect(_on_multiplayer_game_started)
+    multiplayer_client.army_started.connect(_on_multiplayer_army_started)
     multiplayer_client.game_snapshot.connect(_on_multiplayer_snapshot)
     multiplayer_client.game_result.connect(_on_multiplayer_result)
     multiplayer_client.status_changed.connect(_on_multiplayer_status)
@@ -356,6 +357,10 @@ func _update_timer() -> void:
 func _on_multiplayer_army_order(from_iso:String,to_iso:String,share:float)->void:
     if is_instance_valid(multiplayer_client):
         multiplayer_client.send_army(from_iso,to_iso,share)
+
+func _on_multiplayer_army_started(army:Dictionary,_server_time:float)->void:
+    if multiplayer_game and is_instance_valid(world_map):
+        world_map.apply_multiplayer_army_started(army)
 
 func _on_multiplayer_snapshot(state:Dictionary)->void:
     if not multiplayer_game or not is_instance_valid(world_map):return

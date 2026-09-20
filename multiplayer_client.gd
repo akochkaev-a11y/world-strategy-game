@@ -2,6 +2,7 @@ extends Node
 
 signal room_state_changed(state: Dictionary)
 signal game_started(state: Dictionary)
+signal army_started(army: Dictionary, server_time: float)
 signal game_snapshot(state: Dictionary)
 signal game_result(winner: String)
 signal status_changed(text: String)
@@ -19,6 +20,7 @@ var connected: bool = false
 var connection_started_msec: int = 0
 var reconnect_wait: float = -1.0
 var auto_reconnect: bool = false
+var last_game_revision: int = -1
 
 func _ready() -> void:
     _load_saved_session()
@@ -31,7 +33,7 @@ func resume_saved_session() -> void:
         status_changed.emit("Сохранённая игровая сессия не найдена.")
         return
     auto_reconnect = true
-    pending_action = {"type":"reconnect","code":room_code,"token":session_token}
+    pending_action = {"type":"reconnect","code":room_code,"session_token":session_token}
     _connect(server_url)
 
 func create_room(url: String, name_value: String) -> void:
@@ -58,7 +60,7 @@ func start_room() -> void:
     _send({"type":"start_room"})
 
 func send_army(from_iso:String,to_iso:String,share:float=0.5)->void:
-    _send({"type":"send_army","from":from_iso,"to":to_iso,"share":share})
+    _send({"type":"send_army","source":from_iso,"target":to_iso,"share":share})
 
 func _safe_name(value: String) -> String:
     var clean:String=value.strip_edges()
@@ -69,6 +71,7 @@ func _clear_saved_session() -> void:
     session_token=""
     room_code=""
     auto_reconnect=false
+    last_game_revision=-1
     var cfg:=ConfigFile.new()
     cfg.set_value("session","server_url","")
     cfg.set_value("session","player_name","")
@@ -119,7 +122,7 @@ func _process(delta: float) -> void:
         reconnect_wait-=delta
         if reconnect_wait<=0.0:
             reconnect_wait=-1.0
-            pending_action={"type":"reconnect","code":room_code,"token":session_token}
+            pending_action={"type":"reconnect","code":room_code,"session_token":session_token}
             _connect(server_url)
         return
     socket.poll()
@@ -167,7 +170,7 @@ func _handle_message(message_text: String) -> void:
         pass
     elif msg_type=="session":
         player_id=str(msg.get("player_id",""))
-        session_token=str(msg.get("token",""))
+        session_token=str(msg.get("session_token",msg.get("token","")))
         room_code=str(msg.get("code",""))
         auto_reconnect=true
         _save_session()
@@ -175,9 +178,16 @@ func _handle_message(message_text: String) -> void:
         room_state_changed.emit(Dictionary(msg.get("state",{})))
     elif msg_type=="game_started":
         auto_reconnect=true
+        last_game_revision=-1
         game_started.emit(Dictionary(msg.get("state",{})))
+    elif msg_type=="army_started":
+        army_started.emit(Dictionary(msg.get("army",{})),float(msg.get("server_time",0.0)))
     elif msg_type=="game_state":
-        game_snapshot.emit(Dictionary(msg.get("state",{})))
+        var state:Dictionary=Dictionary(msg.get("state",{}))
+        var revision:int=int(state.get("revision",last_game_revision+1))
+        if revision>=last_game_revision:
+            last_game_revision=revision
+            game_snapshot.emit(state)
     elif msg_type=="game_over":
         game_result.emit(str(msg.get("winner","")))
     elif msg_type=="error":

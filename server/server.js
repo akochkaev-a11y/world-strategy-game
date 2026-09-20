@@ -1,10 +1,12 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const WebSocket = require("ws");
 
 const PORT = Number(process.env.PORT || 8080);
 const TICK_MS = 50;
 const SNAPSHOT_MS = 100;
+const ROOM_RETENTION_MS = 6 * 60 * 60 * 1000;
 const ARMY_SPEED = 110;
 const UNIT_SPACING = 9;
 const UNIT_RADIUS = 3.2;
@@ -17,8 +19,8 @@ const LON_MIN=-12, LON_MAX=150, LAT_MIN=5, LAT_MAX=76;
 const rooms = new Map();
 let nextArmyId = 1;
 
-function randomId() { return Math.random().toString(36).slice(2, 10); }
-function token() { return randomId()+randomId()+randomId(); }
+function randomId() { return crypto.randomBytes(8).toString("hex"); }
+function token() { return crypto.randomBytes(32).toString("base64url"); }
 function roomCode() {
   let value="";
   do value=String(Math.floor(100000+Math.random()*900000)); while (rooms.has(value));
@@ -121,7 +123,16 @@ function makeGame(room) {
   const humanCountries=new Set([...room.players.values()].map(p=>p.country).filter(Boolean));
   const aiTimers={};
   for (const c of ACTIVE) if (!humanCountries.has(c)) aiTimers[c]=5+Math.random()*10;
-  return {territories,armies:[],aiTimers,elapsed:0,snapshotClock:0,winner:""};
+  return {
+    territories,
+    armies:[],
+    aiTimers,
+    aiCountries:[...Object.keys(aiTimers)],
+    elapsed:0,
+    snapshotClock:0,
+    winner:"",
+    onArmyStarted:null
+  };
 }
 function publicRoom(room) {
   const host=room.players.get(room.hostToken);
@@ -129,7 +140,7 @@ function publicRoom(room) {
     code:room.code,
     host_id:host?host.id:"",
     started:room.started,
-    players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws}))
+    players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws&&p.ws.readyState===WebSocket.OPEN}))
   };
 }
 function broadcast(room,payload) {
@@ -141,7 +152,12 @@ function snapshot(room) {
   const g=room.game, territories={};
   for (const [iso,t] of Object.entries(g.territories)) territories[iso]={owner:t.owner,army:Math.max(0,Math.floor(t.army))};
   return {
+    revision:room.revision,
+    phase:g.winner?"finished":"running",
     time:g.elapsed,
+    winner:g.winner,
+    players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws&&p.ws.readyState===WebSocket.OPEN})),
+    ai_countries:g.aiCountries.slice(),
     territories,
     armies:g.armies.map(a=>({
       id:a.id,
@@ -158,6 +174,20 @@ function snapshot(room) {
 }
 function sendSnapshot(room) { broadcast(room,{type:"game_state",state:snapshot(room)}); }
 
+function publicArmy(army) {
+  return {
+    id:army.id,
+    owner:army.owner,
+    source:army.source,
+    target:army.target,
+    amount:army.units.length,
+    pending:Math.max(0,Math.floor(army.pending)),
+    progress:army.units.length?Math.max(...army.units):0,
+    units:army.units.slice(),
+    route_length:army.route.routeLength
+  };
+}
+
 function reservedFrom(g,source) {
   return g.armies.filter(a=>a.source===source).reduce((s,a)=>s+a.pending,0);
 }
@@ -168,7 +198,7 @@ function addArmy(g,source,target,share,exact) {
   const free=Math.max(0,src.army-reservedFrom(g,source));
   const requested=exact==null?Math.floor(free*share):Math.min(Math.floor(exact),Math.floor(free));
   if (requested<1) return false;
-  g.armies.push({
+  const army={
     id:nextArmyId++,
     owner:src.owner,
     source,
@@ -177,8 +207,10 @@ function addArmy(g,source,target,share,exact) {
     emitClock:EMIT_INTERVAL,
     units:[],
     route:routeInfo(source,target)
-  });
-  return true;
+  };
+  g.armies.push(army);
+  if (typeof g.onArmyStarted==="function") g.onArmyStarted(publicArmy(army));
+  return army;
 }
 function sendExact(g,source,target,amount) {
   const t=g.territories[source];
@@ -335,6 +367,7 @@ function tickRoom(room,dt) {
   const g=room.game;
   if (!g||g.winner) return;
   g.elapsed+=dt;
+  room.revision++;
   for (const t of Object.values(g.territories)) {
     t.growth+=(t.owner==="NEUTRAL"?0.5:1.0)*dt;
     const whole=Math.floor(t.growth);
@@ -360,7 +393,10 @@ function tickRoom(room,dt) {
   }
 }
 
-const wss=new WebSocket.Server({port:PORT});
+function startServer(options={}) {
+const port=options.port==null?PORT:Number(options.port);
+const startLoop=options.startLoop!==false;
+const wss=new WebSocket.Server({port,maxPayload:16*1024});
 wss.on("connection",ws=>{
   let room=null,player=null;
   send(ws,{type:"welcome"});
@@ -373,9 +409,9 @@ wss.on("connection",ws=>{
       if (room) return error(ws,"Вы уже находитесь в комнате.");
       const code=roomCode(),tok=token();
       player={id:randomId(),token:tok,name:String(msg.name||"Игрок").slice(0,24),country:"",ws};
-      room={code,hostToken:tok,started:false,players:new Map([[tok,player]]),game:null,createdAt:Date.now()};
+      room={code,hostToken:tok,started:false,players:new Map([[tok,player]]),game:null,createdAt:Date.now(),lastActivity:Date.now(),revision:0};
       rooms.set(code,room);
-      send(ws,{type:"session",player_id:player.id,token:tok,code});
+      send(ws,{type:"session",player_id:player.id,session_token:tok,code});
       return broadcastRoom(room);
     }
 
@@ -388,20 +424,23 @@ wss.on("connection",ws=>{
       const tok=token();
       player={id:randomId(),token:tok,name:String(msg.name||"Игрок").slice(0,24),country:"",ws};
       room=found;
+      room.lastActivity=Date.now();
       room.players.set(tok,player);
-      send(ws,{type:"session",player_id:player.id,token:tok,code:room.code});
+      send(ws,{type:"session",player_id:player.id,session_token:tok,code:room.code});
       return broadcastRoom(room);
     }
 
     if (msg.type==="reconnect") {
       const found=rooms.get(String(msg.code||""));
-      const p=found?found.players.get(String(msg.token||"")):null;
+      const reconnectToken=String(msg.session_token||msg.token||"");
+      const p=found?found.players.get(reconnectToken):null;
       if (!found||!p) return error(ws,"Сессия комнаты не найдена.");
       room=found;
+      room.lastActivity=Date.now();
       player=p;
       if(player.ws && player.ws!==ws && player.ws.readyState===WebSocket.OPEN) player.ws.close();
       player.ws=ws;
-      send(ws,{type:"session",player_id:player.id,token:player.token,code:room.code});
+      send(ws,{type:"session",player_id:player.id,session_token:player.token,code:room.code});
       if (room.started) {
         send(ws,{type:"game_started",state:publicRoom(room)});
         send(ws,{type:"game_state",state:snapshot(room)});
@@ -424,22 +463,25 @@ wss.on("connection",ws=>{
     }
 
     if (msg.type==="start_room") {
+      if (room.started) return error(ws,"Партия уже началась.");
       if (room.hostToken!==player.token) return error(ws,"Запустить игру может только создатель комнаты.");
       const players=[...room.players.values()];
       if (players.some(p=>!p.country)) return error(ws,"Каждый игрок должен выбрать страну.");
       room.started=true;
       room.game=makeGame(room);
+      room.game.onArmyStarted=army=>broadcast(room,{type:"army_started",server_time:room.game.elapsed,army});
       broadcast(room,{type:"game_started",state:publicRoom(room)});
       return sendSnapshot(room);
     }
 
     if (msg.type==="send_army") {
       if (!room.started||!room.game||room.game.winner) return;
-      const from=String(msg.from||""),to=String(msg.to||"");
+      const from=String(msg.source||msg.from||""),to=String(msg.target||msg.to||"");
       if (!PLAYABLE.includes(from)||!PLAYABLE.includes(to)||from===to) return;
       const src=room.game.territories[from];
       if (!src||src.owner!==player.country) return error(ws,"Этой территорией управляет другая страна.");
-      const share=Math.max(0.01,Math.min(1,Number(msg.share)||0.5));
+      const rawShare=Number(msg.share);
+      const share=Number.isFinite(rawShare)?Math.max(0.01,Math.min(1,rawShare)):0.5;
       if(addArmy(room.game,from,to,share,null)) sendSnapshot(room);
       return;
     }
@@ -448,17 +490,46 @@ wss.on("connection",ws=>{
   ws.on("close",()=>{
     if (!room||!player) return;
     if (player.ws===ws) player.ws=null;
+    room.lastActivity=Date.now();
     if (!room.started) broadcastRoom(room);
   });
 });
 
-setInterval(()=>{
+let previousTick=Date.now();
+const loop=startLoop?setInterval(()=>{
   const now=Date.now();
+  const dt=Math.max(0.001,Math.min(0.25,(now-previousTick)/1000));
+  previousTick=now;
   for (const [code,room] of rooms) {
-    if (room.started&&room.game) tickRoom(room,TICK_MS/1000);
+    if (room.started&&room.game) tickRoom(room,dt);
     const connected=[...room.players.values()].some(p=>p.ws&&p.ws.readyState===WebSocket.OPEN);
-    if(!connected && now-room.createdAt>6*60*60*1000) rooms.delete(code);
+    if(!connected && now-room.lastActivity>ROOM_RETENTION_MS) rooms.delete(code);
   }
-},TICK_MS);
+},TICK_MS):null;
 
-console.log("World Strategy authoritative server listening on :"+PORT);
+const close=()=>new Promise(resolve=>{
+  if(loop) clearInterval(loop);
+  for(const client of wss.clients) client.terminate();
+  wss.close(()=>resolve());
+});
+wss.gameClose=close;
+return wss;
+}
+
+if (require.main===module) {
+  startServer();
+  console.log("World Strategy authoritative server listening on :"+PORT);
+}
+
+module.exports={
+  ACTIVE,
+  PLAYABLE,
+  addArmy,
+  checkWinner,
+  makeGame,
+  resolveArrivals,
+  resolveUnitCollisions,
+  snapshot,
+  startServer,
+  tickRoom
+};

@@ -1,0 +1,150 @@
+const assert = require("node:assert/strict");
+const { once } = require("node:events");
+const test = require("node:test");
+const WebSocket = require("ws");
+
+const {
+  ACTIVE,
+  addArmy,
+  checkWinner,
+  makeGame,
+  resolveArrivals,
+  resolveUnitCollisions,
+  startServer,
+  tickRoom
+} = require("../server");
+
+function fakeRoom(humanCountries=["RU"]) {
+  const players = new Map();
+  humanCountries.forEach((country,index)=>players.set(`token-${index}`,{
+    id:`player-${index}`,
+    token:`token-${index}`,
+    name:`Player ${index}`,
+    country,
+    ws:null
+  }));
+  const room={code:"123456",hostToken:"token-0",started:true,players,game:null,revision:0};
+  room.game=makeGame(room);
+  return room;
+}
+
+function inbox(ws) {
+  const messages=[];
+  ws.on("message",raw=>messages.push(JSON.parse(raw.toString())));
+  return {
+    async take(predicate,timeout=1500) {
+      const started=Date.now();
+      while(Date.now()-started<timeout) {
+        const index=messages.findIndex(predicate);
+        if(index>=0) return messages.splice(index,1)[0];
+        await new Promise(resolve=>setTimeout(resolve,5));
+      }
+      assert.fail(`Timed out waiting for message; buffered=${JSON.stringify(messages)}`);
+    }
+  };
+}
+
+async function connect(port) {
+  const ws=new WebSocket(`ws://127.0.0.1:${port}`);
+  const box=inbox(ws);
+  await once(ws,"open");
+  await box.take(message=>message.type==="welcome");
+  return {ws,box};
+}
+
+test("authoritative game owns growth, AI assignments, movement, collisions and capture",()=>{
+  const room=fakeRoom(["RU"]);
+  const game=room.game;
+  assert.equal(game.aiCountries.includes("RU"),false);
+  assert.equal(game.aiCountries.includes("DE"),true);
+  for(const owner of Object.keys(game.aiTimers)) game.aiTimers[owner]=999;
+
+  tickRoom(room,2);
+  assert.equal(game.territories.RU.army,102);
+  assert.equal(game.territories.KZ.army,101);
+
+  const moving=addArmy(game,"RU","UA",0.5,null);
+  assert.ok(moving);
+  assert.equal(moving.pending,51);
+  tickRoom(room,0.1);
+  assert.ok(moving.units.length>0);
+  assert.ok(game.territories.RU.army<102);
+
+  const opposing=addArmy(game,"DE","UA",0,1);
+  moving.pending=0;
+  moving.units=[0.4];
+  opposing.pending=0;
+  opposing.units=[0.4];
+  opposing.route=moving.route;
+  resolveUnitCollisions(game);
+  assert.equal(moving.units.length,0);
+  assert.equal(opposing.units.length,0);
+
+  game.territories.UA.army=1;
+  const capture=addArmy(game,"RU","UA",0,2);
+  capture.pending=0;
+  capture.units=[1,1];
+  resolveArrivals(game);
+  assert.equal(game.territories.UA.owner,"RU");
+  assert.equal(game.territories.UA.army,1);
+
+  for(const country of ACTIVE) game.territories[country].owner="RU";
+  game.armies=[];
+  checkWinner(room);
+  assert.equal(game.winner,"RU");
+});
+
+test("room protocol starts one game, broadcasts armies, rejects strangers and reconnects by token",async t=>{
+  const server=startServer({port:0,startLoop:false});
+  await once(server,"listening");
+  t.after(async()=>server.gameClose());
+  const port=server.address().port;
+
+  const first=await connect(port);
+  first.ws.send(JSON.stringify({type:"create_room",name:"Host"}));
+  const firstSession=await first.box.take(message=>message.type==="session");
+  await first.box.take(message=>message.type==="room_state");
+  first.ws.send(JSON.stringify({type:"select_country",country:"RU"}));
+  await first.box.take(message=>message.type==="room_state"&&message.state.players[0].country==="RU");
+
+  const second=await connect(port);
+  second.ws.send(JSON.stringify({type:"join_room",code:firstSession.code,name:"Guest"}));
+  const secondSession=await second.box.take(message=>message.type==="session");
+  assert.ok(secondSession.session_token);
+  second.ws.send(JSON.stringify({type:"select_country",country:"DE"}));
+  await second.box.take(message=>message.type==="room_state"&&message.state.players.some(p=>p.country==="DE"));
+
+  first.ws.send(JSON.stringify({type:"start_room"}));
+  await first.box.take(message=>message.type==="game_started");
+  const initial=await first.box.take(message=>message.type==="game_state");
+  assert.equal(initial.state.players.length,2);
+  assert.equal(initial.state.ai_countries.includes("RU"),false);
+  assert.equal(initial.state.ai_countries.includes("DE"),false);
+
+  second.ws.send(JSON.stringify({type:"send_army",source:"RU",target:"KZ",share:0.5}));
+  const forbidden=await second.box.take(message=>message.type==="error");
+  assert.match(forbidden.message,/другая страна/);
+
+  first.ws.send(JSON.stringify({type:"send_army",source:"RU",target:"KZ",share:0.5}));
+  const started=await second.box.take(message=>message.type==="army_started");
+  assert.equal(started.army.owner,"RU");
+  assert.equal(started.army.pending,50);
+
+  first.ws.close();
+  await once(first.ws,"close");
+  const resumed=await connect(port);
+  resumed.ws.send(JSON.stringify({type:"reconnect",code:firstSession.code,session_token:firstSession.session_token}));
+  await resumed.box.take(message=>message.type==="session");
+  await resumed.box.take(message=>message.type==="game_started");
+  const resumedState=await resumed.box.take(message=>message.type==="game_state");
+  assert.equal(resumedState.state.players.find(p=>p.country==="RU").connected,true);
+
+  const stranger=await connect(port);
+  stranger.ws.send(JSON.stringify({type:"join_room",code:firstSession.code,name:"Stranger"}));
+  const rejected=await stranger.box.take(message=>message.type==="error");
+  assert.match(rejected.message,/началась/);
+
+  resumed.ws.close();
+  second.ws.close();
+  stranger.ws.close();
+});

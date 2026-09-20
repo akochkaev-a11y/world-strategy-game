@@ -76,6 +76,15 @@ func apply_multiplayer_state(state:Dictionary)->void:
             armies.append(Dictionary(raw_army).duplicate(true))
     queue_redraw()
 
+func apply_multiplayer_army_started(remote_army:Dictionary)->void:
+    if not multiplayer_mode:return
+    var army_id:int=int(remote_army.get("id",-1))
+    if army_id<0:return
+    for existing in armies:
+        if int(existing.get("id",-2))==army_id:return
+    armies.append(remote_army.duplicate(true))
+    queue_redraw()
+
 func show_multiplayer_result(winner:String)->void:
     if multiplayer_result_shown:return
     multiplayer_result_shown=true

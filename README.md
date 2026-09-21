@@ -6,5 +6,7 @@ single-player simulation and server-authoritative WebSocket multiplayer for up t
 results, and session-token reconnection are owned by `server/server.js`.
 
 The playable world currently includes Eurasia, North America, Central America,
-the Caribbean, and South America. Fifteen countries are active powers; the
-remaining playable territories begin neutral.
+the Caribbean, and South America. Sixteen countries are active powers; the
+remaining playable territories begin neutral. Country lists and shared gameplay
+settings are defined once in `game_config.json` and consumed by the client,
+server, and CI validation.

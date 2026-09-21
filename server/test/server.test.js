@@ -5,6 +5,11 @@ const WebSocket = require("ws");
 
 const {
   ACTIVE,
+  BACKGROUND,
+  GAME_CONFIG,
+  NEUTRAL,
+  PLAYABLE,
+  PROTOCOL_VERSION,
   addArmy,
   checkEliminations,
   checkWinner,
@@ -49,9 +54,23 @@ async function connect(port) {
   const ws=new WebSocket(`ws://127.0.0.1:${port}`);
   const box=inbox(ws);
   await once(ws,"open");
-  await box.take(message=>message.type==="welcome");
+  const welcome=await box.take(message=>message.type==="welcome");
+  assert.equal(welcome.protocol_version,PROTOCOL_VERSION);
   return {ws,box};
 }
+
+function command(ws,payload,protocolVersion=PROTOCOL_VERSION) {
+  ws.send(JSON.stringify({...payload,protocol_version:protocolVersion}));
+}
+
+test("shared game configuration has unique and complete country groups",()=>{
+  assert.equal(PROTOCOL_VERSION,GAME_CONFIG.protocol_version);
+  assert.equal(ACTIVE.length,16);
+  assert.equal(NEUTRAL.length,39);
+  assert.equal(BACKGROUND.length,7);
+  assert.equal(PLAYABLE.length,55);
+  assert.equal(new Set([...PLAYABLE,...BACKGROUND]).size,62);
+});
 
 test("authoritative game owns growth, AI assignments, movement, collisions and capture",()=>{
   const room=fakeRoom(["RU"]);
@@ -119,20 +138,20 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   const port=server.address().port;
 
   const first=await connect(port);
-  first.ws.send(JSON.stringify({type:"create_room",name:"Host"}));
+  command(first.ws,{type:"create_room",name:"Host"});
   const firstSession=await first.box.take(message=>message.type==="session");
   await first.box.take(message=>message.type==="room_state");
-  first.ws.send(JSON.stringify({type:"select_country",country:"RU"}));
+  command(first.ws,{type:"select_country",country:"RU"});
   await first.box.take(message=>message.type==="room_state"&&message.state.players[0].country==="RU");
 
   const second=await connect(port);
-  second.ws.send(JSON.stringify({type:"join_room",code:firstSession.code,name:"Guest"}));
+  command(second.ws,{type:"join_room",code:firstSession.code,name:"Guest"});
   const secondSession=await second.box.take(message=>message.type==="session");
   assert.ok(secondSession.session_token);
-  second.ws.send(JSON.stringify({type:"select_country",country:"DE"}));
+  command(second.ws,{type:"select_country",country:"DE"});
   await second.box.take(message=>message.type==="room_state"&&message.state.players.some(p=>p.country==="DE"));
 
-  first.ws.send(JSON.stringify({type:"start_room"}));
+  command(first.ws,{type:"start_room"});
   await first.box.take(message=>message.type==="game_started");
   const initial=await first.box.take(message=>message.type==="game_state");
   assert.equal(initial.player_country,"RU");
@@ -140,11 +159,11 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   assert.equal(initial.state.ai_countries.includes("RU"),false);
   assert.equal(initial.state.ai_countries.includes("DE"),false);
 
-  second.ws.send(JSON.stringify({type:"send_army",source:"RU",target:"KZ",share:0.5}));
+  command(second.ws,{type:"send_army",source:"RU",target:"KZ",share:0.5});
   const forbidden=await second.box.take(message=>message.type==="error");
   assert.match(forbidden.message,/другая страна/);
 
-  first.ws.send(JSON.stringify({type:"send_army",source:"RU",target:"KZ",share:0.5}));
+  command(first.ws,{type:"send_army",source:"RU",target:"KZ",share:0.5});
   const started=await second.box.take(message=>message.type==="army_started");
   assert.equal(started.army.owner,"RU");
   assert.equal(started.army.pending,50);
@@ -152,7 +171,7 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   first.ws.close();
   await once(first.ws,"close");
   const resumed=await connect(port);
-  resumed.ws.send(JSON.stringify({type:"reconnect",code:firstSession.code,session_token:firstSession.session_token}));
+  command(resumed.ws,{type:"reconnect",code:firstSession.code,session_token:firstSession.session_token});
   await resumed.box.take(message=>message.type==="session");
   const resumedStart=await resumed.box.take(message=>message.type==="game_started");
   assert.equal(resumedStart.player_country,"RU");
@@ -160,18 +179,49 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   assert.equal(resumedState.state.players.find(p=>p.country==="RU").connected,true);
 
   const stranger=await connect(port);
-  stranger.ws.send(JSON.stringify({type:"join_room",code:firstSession.code,name:"Stranger"}));
+  command(stranger.ws,{type:"join_room",code:firstSession.code,name:"Stranger"});
   const rejected=await stranger.box.take(message=>message.type==="error");
   assert.match(rejected.message,/началась/);
 
-  resumed.ws.send(JSON.stringify({type:"leave_room"}));
+  command(resumed.ws,{type:"leave_room"});
   await resumed.box.take(message=>message.type==="left_room");
   const revoked=await connect(port);
-  revoked.ws.send(JSON.stringify({type:"reconnect",code:firstSession.code,session_token:firstSession.session_token}));
+  command(revoked.ws,{type:"reconnect",code:firstSession.code,session_token:firstSession.session_token});
   const revokedError=await revoked.box.take(message=>message.type==="error");
   assert.match(revokedError.message,/не найдена/);
 
   revoked.ws.close();
   second.ws.close();
   stranger.ws.close();
+});
+
+test("protocol mismatch and command flooding are rejected",async t=>{
+  const server=startServer({port:0,startLoop:false,maxMessagesPerWindow:2,heartbeatMs:0});
+  await once(server,"listening");
+  t.after(async()=>server.gameClose());
+  const port=server.address().port;
+
+  const legacy=await connect(port);
+  legacy.ws.send(JSON.stringify({type:"create_room",name:"Legacy"}));
+  await legacy.box.take(message=>message.type==="session");
+  await legacy.box.take(message=>message.type==="room_state");
+
+  const outdated=await connect(port);
+  command(outdated.ws,{type:"create_room",name:"Old"},PROTOCOL_VERSION-1);
+  const mismatch=await outdated.box.take(message=>message.type==="error");
+  assert.match(mismatch.message,/несовместима/);
+
+  const client=await connect(port);
+  command(client.ws,{type:"create_room",name:"Fast"});
+  await client.box.take(message=>message.type==="session");
+  await client.box.take(message=>message.type==="room_state");
+  command(client.ws,{type:"select_country",country:"RU"});
+  await client.box.take(message=>message.type==="room_state");
+  command(client.ws,{type:"select_country",country:"DE"});
+  const limited=await client.box.take(message=>message.type==="error");
+  assert.match(limited.message,/Слишком много команд/);
+
+  legacy.ws.close();
+  outdated.ws.close();
+  client.ws.close();
 });

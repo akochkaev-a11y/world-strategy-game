@@ -1,5 +1,7 @@
 extends Control
 
+const GameConfig := preload("res://game_config.gd")
+
 var world_map: Control
 var player_country := ""
 var refresh_clock := 0.0
@@ -7,10 +9,13 @@ var ranking: Array = []
 var totals: Dictionary = {}
 var territory_counts: Dictionary = {}
 
-const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","PT":"Португалия","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония","US":"США","CA":"Канада","MX":"Мексика","BR":"Бразилия","AR":"Аргентина"}
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","PT":"🇵🇹","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
+var country_names: Dictionary = {}
+var country_flags: Dictionary = {}
 
 func setup(map: Control, selected: String) -> void:
+    var config := GameConfig.load_config()
+    country_names = GameConfig.country_names(config)
+    country_flags = GameConfig.country_flags(config)
     world_map = map
     player_country = selected
     mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -73,12 +78,12 @@ func _draw() -> void:
             draw_rect(rect,Color(0.10,0.23,0.34,0.28),true)
         if i > 0:
             draw_line(Vector2(x-gap*0.5,17),Vector2(x-gap*0.5,63),Color(0.28,0.48,0.60,0.18),1.0)
-        var flag: String = str(FLAGS.get(owner,""))
+        var flag: String = str(country_flags.get(owner,""))
         var color: Color = Color(1.0,0.84,0.34) if player else Color(0.92,0.96,0.99)
         draw_string(ThemeDB.fallback_font,Vector2(x,32),flag,HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),20,Color.WHITE)
         draw_string(ThemeDB.fallback_font,Vector2(x,55),"%d  •  %d тер." % [total,lands],HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),15,color)
         if cell_w >= 92.0:
-            var name: String = str(NAMES.get(owner,owner))
+            var name: String = str(country_names.get(owner,owner))
             draw_string(ThemeDB.fallback_font,Vector2(x,71),name,HORIZONTAL_ALIGNMENT_CENTER,int(cell_w),10,Color(0.64,0.73,0.80))
 
 func _glass_box() -> StyleBoxFlat:

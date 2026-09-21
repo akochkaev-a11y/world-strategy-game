@@ -1,0 +1,28 @@
+{
+  "protocol_version": 1,
+  "default_server_url": "ws://87.228.13.236:8080",
+  "max_players": 10,
+  "start_army": 100,
+  "active_growth_per_second": 1.0,
+  "neutral_growth_per_second": 0.5,
+  "active_countries": [
+    {"iso":"RU","name":"Россия","flag":"🇷🇺","color":[0.10,0.42,0.96]},
+    {"iso":"UA","name":"Украина","flag":"🇺🇦","color":[0.98,0.72,0.08]},
+    {"iso":"PL","name":"Польша","flag":"🇵🇱","color":[0.94,0.16,0.36]},
+    {"iso":"FR","name":"Франция","flag":"🇫🇷","color":[0.10,0.68,0.94]},
+    {"iso":"DE","name":"Германия","flag":"🇩🇪","color":[0.62,0.24,0.88]},
+    {"iso":"GB","name":"Великобритания","flag":"🇬🇧","color":[0.12,0.72,0.48]},
+    {"iso":"PT","name":"Португалия","flag":"🇵🇹","color":[0.10,0.62,0.38]},
+    {"iso":"CN","name":"Китай","flag":"🇨🇳","color":[0.94,0.18,0.10]},
+    {"iso":"IN","name":"Индия","flag":"🇮🇳","color":[1.00,0.43,0.06]},
+    {"iso":"IR","name":"Иран","flag":"🇮🇷","color":[0.06,0.55,0.25]},
+    {"iso":"JP","name":"Япония","flag":"🇯🇵","color":[0.94,0.34,0.68]},
+    {"iso":"US","name":"США","flag":"🇺🇸","color":[0.18,0.48,0.92]},
+    {"iso":"CA","name":"Канада","flag":"🇨🇦","color":[0.92,0.18,0.22]},
+    {"iso":"MX","name":"Мексика","flag":"🇲🇽","color":[0.05,0.62,0.34]},
+    {"iso":"BR","name":"Бразилия","flag":"🇧🇷","color":[0.12,0.72,0.30]},
+    {"iso":"AR","name":"Аргентина","flag":"🇦🇷","color":[0.32,0.68,0.94]}
+  ],
+  "neutral_countries": ["KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI","CL","HT","DO","BS","FK","GL","UY","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"],
+  "background_countries": ["ID","MY","TH","MM","VN","YE","OM"]
+}

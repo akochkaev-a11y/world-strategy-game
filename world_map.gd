@@ -3,20 +3,25 @@ extends Control
 signal army_order_requested(from_iso:String,to_iso:String,share:float)
 signal exit_requested
 
+const GameConfig := preload("res://game_config.gd")
 const GEOJSON_PATH := "res://world_countries.json"
 const LON_MIN := -180.0
 const LON_MAX := 180.0
 const LAT_MIN := -60.0
 const LAT_MAX := 85.0
-const ACTIVE_IDS := ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","US","CA","MX","BR","AR"]
-const BACKGROUND_IDS := ["ID","MY","TH","MM","VN","YE","OM"]
-const PLAYABLE_IDS := ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","KZ","SA","MN","PK","TR","AF","ES","TM","SE","UZ","IQ","NO","FI","CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"]
-const MAP_IDS := ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM","CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"]
-const NAMES := {"RU":"Россия","UA":"Украина","PL":"Польша","FR":"Франция","DE":"Германия","GB":"Великобритания","PT":"Португалия","CN":"Китай","IN":"Индия","IR":"Иран","JP":"Япония","US":"США","CA":"Канада","MX":"Мексика","BR":"Бразилия","AR":"Аргентина"}
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","PT":"🇵🇹","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
-const START_ARMY := 100.0
 const ARMY_SPEED := 110.0
 const AI_RESERVE := 30.0
+
+var ACTIVE_IDS: Array = []
+var BACKGROUND_IDS: Array = []
+var PLAYABLE_IDS: Array = []
+var MAP_IDS: Array = []
+var NAMES: Dictionary = {}
+var FLAGS: Dictionary = {}
+var OWNER_COLORS: Dictionary = {}
+var START_ARMY := 100.0
+var ACTIVE_GROWTH := 1.0
+var NEUTRAL_GROWTH := 0.5
 
 var player_country := ""
 var territories:Dictionary={}
@@ -49,6 +54,17 @@ var local_player_eliminated:bool=false
 var elimination_notice:Control
 
 func setup(_data:Dictionary,selected:String)->void:
+    var config := GameConfig.load_config()
+    ACTIVE_IDS = GameConfig.active_ids(config)
+    BACKGROUND_IDS = Array(config.get("background_countries", []))
+    PLAYABLE_IDS = GameConfig.playable_ids(config)
+    MAP_IDS = GameConfig.map_ids(config)
+    NAMES = GameConfig.country_names(config)
+    FLAGS = GameConfig.country_flags(config)
+    OWNER_COLORS = GameConfig.country_colors(config)
+    START_ARMY = float(config.get("start_army", 100.0))
+    ACTIVE_GROWTH = float(config.get("active_growth_per_second", 1.0))
+    NEUTRAL_GROWTH = float(config.get("neutral_growth_per_second", 0.5))
     player_country=selected;_load_geojson();_ensure_territories();_reset_ai_timers();game_started=territories.size()==PLAYABLE_IDS.size();queue_redraw()
 func _ready()->void:
     mouse_filter=Control.MOUSE_FILTER_STOP
@@ -147,7 +163,7 @@ func grow_armies()->void:
     if multiplayer_mode:return
     if game_over:return
     for iso in territories.keys():
-        var t:Dictionary=territories[iso];var base_rate:float=1.0 if str(t.owner)!="NEUTRAL" else 0.5;var rate:float=base_rate*time_scale;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate;var whole:int=int(floor(float(growth_fraction[iso])))
+        var t:Dictionary=territories[iso];var base_rate:float=ACTIVE_GROWTH if str(t.owner)!="NEUTRAL" else NEUTRAL_GROWTH;var rate:float=base_rate*time_scale;growth_fraction[iso]=float(growth_fraction.get(iso,0.0))+rate;var whole:int=int(floor(float(growth_fraction[iso])))
         if whole>0:t.army=float(t.army)+whole;growth_fraction[iso]=float(growth_fraction[iso])-whole
     queue_redraw()
 func _reset_ai_timers()->void:
@@ -241,7 +257,7 @@ func _scaled_poly(poly:PackedVector2Array,center:Vector2,scale:float)->PackedVec
     for p in poly:out.append(center+(p-center)*scale)
     return out
 func _owner_color(owner:String)->Color:
-    var c:Dictionary={"RU":Color(0.10,0.42,0.96),"UA":Color(0.98,0.72,0.08),"PL":Color(0.94,0.16,0.36),"FR":Color(0.10,0.68,0.94),"DE":Color(0.62,0.24,0.88),"GB":Color(0.12,0.72,0.48),"PT":Color(0.10,0.62,0.38),"CN":Color(0.94,0.18,0.10),"IN":Color(1.0,0.43,0.06),"IR":Color(0.06,0.55,0.25),"JP":Color(0.94,0.34,0.68),"US":Color(0.18,0.48,0.92),"CA":Color(0.92,0.18,0.22),"MX":Color(0.05,0.62,0.34),"BR":Color(0.12,0.72,0.30),"AR":Color(0.32,0.68,0.94)};return c.get(owner,Color(0.055,0.065,0.072))
+    return OWNER_COLORS.get(owner,Color(0.055,0.065,0.072))
 func _draw_sea()->void:
     draw_rect(Rect2(Vector2.ZERO,size),Color(0.004,0.014,0.027));var center:=size*Vector2(0.57,0.47);var max_r:float=maxf(size.x,size.y)*0.86
     for i in range(12,0,-1):var f:float=float(i)/12.0;draw_circle(center,max_r*f,Color(0.025,0.105,0.155,0.012+(1.0-f)*0.012))

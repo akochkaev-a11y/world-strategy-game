@@ -12,7 +12,9 @@ npm test
 npm start
 ```
 
-The default port is `8080` and can be overridden with `PORT`.
+The default bind address is `0.0.0.0:8080`. `HOST` and `PORT` can override it.
+When a TLS reverse proxy is enabled, run the service with `HOST=127.0.0.1` so
+the raw WebSocket port is not exposed publicly.
 
 ## Protocol summary
 
@@ -25,6 +27,12 @@ The default port is `8080` and can be overridden with `PORT`.
 - Authoritative `game_state` snapshots contain revision, server timer, players,
   AI countries, territories, moving units, phase, and winner.
 - `game_over` is broadcast to every connected player at the same server tick.
+- Every new client sends the shared `protocol_version`. Version 1 also accepts
+  the previous client without this field, so the current rollout does not force
+  both phones to update simultaneously.
+
+Connections have a payload limit, a command-rate limit, and ping/pong health
+checks. Country lists and shared gameplay settings come from `game_config.json`.
 
 New players cannot join a running match. A disconnected player's country remains
 reserved and idle until that player reconnects; automatic AI takeover is deferred.

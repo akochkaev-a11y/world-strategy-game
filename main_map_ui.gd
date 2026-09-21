@@ -1,12 +1,12 @@
 extends Control
 
-const ACTIVE_ORDER := ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","US","CA","MX","BR","AR"]
-const ACTIVE_COUNTRIES := {
-    "RU":"Россия", "UA":"Украина", "PL":"Польша", "FR":"Франция", "DE":"Германия",
-    "GB":"Великобритания", "PT":"Португалия", "CN":"Китай", "IN":"Индия", "IR":"Иран", "JP":"Япония",
-    "US":"США", "CA":"Канада", "MX":"Мексика", "BR":"Бразилия", "AR":"Аргентина"
-}
-const FLAGS := {"RU":"🇷🇺","UA":"🇺🇦","PL":"🇵🇱","FR":"🇫🇷","DE":"🇩🇪","GB":"🇬🇧","PT":"🇵🇹","CN":"🇨🇳","IN":"🇮🇳","IR":"🇮🇷","JP":"🇯🇵","US":"🇺🇸","CA":"🇨🇦","MX":"🇲🇽","BR":"🇧🇷","AR":"🇦🇷"}
+const GameConfig := preload("res://game_config.gd")
+
+var game_config: Dictionary = {}
+var active_order: Array = []
+var active_countries: Dictionary = {}
+var country_flags: Dictionary = {}
+var default_server_url: String = ""
 
 var world_map: Control
 var military_balance: Control
@@ -31,6 +31,11 @@ var multiplayer_game: bool = false
 var exit_button: Button
 
 func _ready() -> void:
+    game_config = GameConfig.load_config()
+    active_order = GameConfig.active_ids(game_config)
+    active_countries = GameConfig.country_names(game_config)
+    country_flags = GameConfig.country_flags(game_config)
+    default_server_url = str(game_config.get("default_server_url", ""))
     _show_mode_chooser()
 
 func _clear_frontend() -> void:
@@ -103,9 +108,9 @@ func _show_country_chooser() -> void:
     grid.add_theme_constant_override("h_separation",12)
     grid.add_theme_constant_override("v_separation",12)
     box.add_child(grid)
-    for iso in ACTIVE_ORDER:
+    for iso in active_order:
         var b := Button.new()
-        b.text = "%s\n%s" % [str(FLAGS.get(iso,"")),str(ACTIVE_COUNTRIES.get(iso,iso))]
+        b.text = "%s\n%s" % [str(country_flags.get(iso,"")),str(active_countries.get(iso,iso))]
         b.custom_minimum_size = Vector2(138,145)
         b.add_theme_font_size_override("font_size",19)
         b.pressed.connect(_start_game.bind(str(iso)))
@@ -139,7 +144,7 @@ func _show_multiplayer_menu() -> void:
     box.add_child(name_field)
     server_field = LineEdit.new()
     server_field.placeholder_text = "wss://адрес-сервера"
-    server_field.text = "ws://87.228.13.236:8080"
+    server_field.text = default_server_url
     server_field.custom_minimum_size = Vector2(560,50)
     box.add_child(server_field)
     if multiplayer_client.has_saved_session():
@@ -256,15 +261,15 @@ func _show_lobby() -> void:
     grid.add_theme_constant_override("h_separation",10)
     grid.add_theme_constant_override("v_separation",10)
     box.add_child(grid)
-    for iso_raw in ACTIVE_ORDER:
+    for iso_raw in active_order:
         var iso: String = str(iso_raw)
         var b := Button.new()
         b.custom_minimum_size = Vector2(165,112)
         var holder: String = str(taken.get(iso,""))
         if holder == "":
-            b.text = "%s\n%s\nСвободно" % [str(FLAGS.get(iso,"")),str(ACTIVE_COUNTRIES.get(iso,iso))]
+            b.text = "%s\n%s\nСвободно" % [str(country_flags.get(iso,"")),str(active_countries.get(iso,iso))]
         else:
-            b.text = "%s\n%s\n%s" % [str(FLAGS.get(iso,"")),str(ACTIVE_COUNTRIES.get(iso,iso)),holder]
+            b.text = "%s\n%s\n%s" % [str(country_flags.get(iso,"")),str(active_countries.get(iso,iso)),holder]
             if iso != selected_country:
                 b.disabled = true
         b.pressed.connect(_select_multiplayer_country.bind(iso))
@@ -319,7 +324,7 @@ func _start_game(selected: String, multiplayer: bool = false) -> void:
     world_map = preload("res://optimized_world_map.gd").new()
     add_child(world_map)
     world_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    world_map.setup(ACTIVE_COUNTRIES,selected)
+    world_map.setup(active_countries,selected)
     multiplayer_game = multiplayer
     if multiplayer_game:
         world_map.set_multiplayer_mode(true)

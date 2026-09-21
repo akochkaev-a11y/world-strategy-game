@@ -66,8 +66,22 @@ jobs:
           if not path.is_file() or path.stat().st_size == 0:
               raise SystemExit('Missing bundled world_countries.json')
 
-          wanted = ["RU","UA","PL","FR","DE","GB","PT","CN","IN","IR","JP","KZ","SA","ID","MN","PK","TR","MM","AF","YE","TH","ES","TM","SE","UZ","IQ","NO","FI","VN","MY","OM","CA","US","AR","CL","HT","DO","BS","FK","GL","MX","UY","BR","BO","PE","CO","PA","CR","NI","HN","SV","GT","BZ","VE","GY","SR","EC","PR","JM","CU","PY","TT"]
+          config_path = Path('game_config.json')
+          if not config_path.is_file() or config_path.stat().st_size == 0:
+              raise SystemExit('Missing game_config.json')
+          config = json.loads(config_path.read_text())
+          active = [country['iso'] for country in config.get('active_countries', [])]
+          neutral = config.get('neutral_countries', [])
+          background = config.get('background_countries', [])
+          wanted = active + neutral + background
           wanted_set = set(wanted)
+          if not isinstance(config.get('protocol_version'), int) or config['protocol_version'] < 1:
+              raise SystemExit('Invalid protocol_version in game_config.json')
+          if len(wanted) != len(wanted_set):
+              raise SystemExit('Duplicate country in game_config.json')
+          max_players = int(config.get('max_players', 0))
+          if max_players < 1 or max_players > len(active):
+              raise SystemExit('max_players must be between 1 and the active-country count')
           a3 = {"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","PRT":"PT","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
           data = json.loads(path.read_text())
           found = []
@@ -84,7 +98,8 @@ jobs:
 
           if len(found) != len(wanted) or set(found) != wanted_set or len(found) != len(set(found)):
               raise SystemExit(f'geometry validation failed: count={len(found)} found={sorted(found)}')
-          print('Bundled playable geometry count:', len(found))
+          print('Bundled geometry count:', len(found))
+          print('Active:', len(active), 'Neutral:', len(neutral), 'Background:', len(background))
           PY
           test -s world_countries.json
 

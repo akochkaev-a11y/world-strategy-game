@@ -1,5 +1,7 @@
 extends Node
 
+const GameConfig := preload("res://game_config.gd")
+
 signal room_state_changed(state: Dictionary)
 signal game_started(state: Dictionary)
 signal army_started(army: Dictionary, server_time: float)
@@ -23,8 +25,10 @@ var connection_started_msec: int = 0
 var reconnect_wait: float = -1.0
 var auto_reconnect: bool = false
 var last_game_revision: int = -1
+var protocol_version: int = 0
 
 func _ready() -> void:
+    protocol_version = int(GameConfig.load_config().get("protocol_version", 0))
     _load_saved_session()
 
 func has_saved_session() -> bool:
@@ -63,7 +67,7 @@ func start_room() -> void:
 
 func leave_room() -> void:
     if socket.get_ready_state()==WebSocketPeer.STATE_OPEN:
-        socket.send_text(JSON.stringify({"type":"leave_room"}))
+        _send({"type":"leave_room"})
     auto_reconnect=false
     pending_action.clear()
     _clear_saved_session()
@@ -174,7 +178,9 @@ func _send(payload: Dictionary) -> void:
     if socket.get_ready_state()!=WebSocketPeer.STATE_OPEN:
         status_changed.emit("Нет соединения с сервером.")
         return
-    socket.send_text(JSON.stringify(payload))
+    var message := payload.duplicate(true)
+    message["protocol_version"] = protocol_version
+    socket.send_text(JSON.stringify(message))
 
 func _handle_message(message_text: String) -> void:
     var parsed:Variant=JSON.parse_string(message_text)
@@ -182,7 +188,12 @@ func _handle_message(message_text: String) -> void:
     var msg:Dictionary=parsed
     var msg_type:String=str(msg.get("type",""))
     if msg_type=="welcome":
-        pass
+        var server_protocol:int=int(msg.get("protocol_version",0))
+        if server_protocol!=protocol_version:
+            auto_reconnect=false
+            pending_action.clear()
+            status_changed.emit("Версия игры несовместима с сервером. Обновите приложение.")
+            socket.close(1002,"protocol_mismatch")
     elif msg_type=="session":
         player_id=str(msg.get("player_id",""))
         session_token=str(msg.get("session_token",msg.get("token","")))

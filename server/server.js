@@ -20,17 +20,26 @@ const UNIT_SPACING = 9;
 const UNIT_RADIUS = 3.2;
 const EMIT_INTERVAL = UNIT_SPACING / ARMY_SPEED;
 const COLLISION_RADIUS = UNIT_RADIUS * 2.25;
-const AI_RESERVE = 30;
 const ACTIVE = GAME_CONFIG.active_countries.map(country=>String(country.iso));
 const NEUTRAL = GAME_CONFIG.neutral_countries.map(String);
 const BACKGROUND = GAME_CONFIG.background_countries.map(String);
 const PLAYABLE = [...ACTIVE,...NEUTRAL];
+const DIFFICULTIES = new Map(GAME_CONFIG.difficulties.map(value=>[String(value.id),value]));
+const DEFAULT_DIFFICULTY = String(GAME_CONFIG.default_difficulty || "easy");
+const NEUTRAL_PROTECTION_SECONDS = Number(GAME_CONFIG.neutral_capture_protection_seconds || 60);
 const LON_MIN=-180, LON_MAX=180, LAT_MIN=-60, LAT_MAX=85;
 const rooms = new Map();
 let nextArmyId = 1;
 
 if (!Number.isInteger(PROTOCOL_VERSION) || PROTOCOL_VERSION<1) throw new Error("Invalid protocol_version in game_config.json");
 if (new Set([...PLAYABLE,...BACKGROUND]).size!==PLAYABLE.length+BACKGROUND.length) throw new Error("Duplicate country in game_config.json");
+if (!DIFFICULTIES.has(DEFAULT_DIFFICULTY)) throw new Error("Invalid default_difficulty in game_config.json");
+
+function difficultyById(id) { return DIFFICULTIES.get(String(id)) || DIFFICULTIES.get(DEFAULT_DIFFICULTY); }
+function aiDelay(difficulty) {
+  const min=Number(difficulty.ai_delay_min),max=Number(difficulty.ai_delay_max);
+  return min+Math.random()*Math.max(0,max-min);
+}
 
 function randomId() { return crypto.randomBytes(8).toString("hex"); }
 function token() { return crypto.randomBytes(32).toString("base64url"); }
@@ -132,15 +141,18 @@ function routePoint(army,t) {
 
 function makeGame(room) {
   const territories={};
-  for (const iso of PLAYABLE) territories[iso]={owner:ACTIVE.includes(iso)?iso:"NEUTRAL",army:START_ARMY,growth:0};
+  for (const iso of PLAYABLE) territories[iso]={owner:ACTIVE.includes(iso)?iso:"NEUTRAL",army:START_ARMY,growth:0,protection:0};
   const humanCountries=new Set([...room.players.values()].map(p=>p.country).filter(Boolean));
+  const difficulty=difficultyById(room.difficulty);
   const aiTimers={};
-  for (const c of ACTIVE) if (!humanCountries.has(c)) aiTimers[c]=5+Math.random()*10;
+  for (const c of ACTIVE) if (!humanCountries.has(c)) aiTimers[c]=aiDelay(difficulty);
   return {
     territories,
     armies:[],
     aiTimers,
     aiCountries:[...Object.keys(aiTimers)],
+    difficulty,
+    difficultyId:String(difficulty.id),
     eliminatedCountries:new Set(),
     elapsed:0,
     snapshotClock:0,
@@ -155,6 +167,7 @@ function publicRoom(room) {
     code:room.code,
     host_id:host?host.id:"",
     started:room.started,
+    difficulty:room.game?room.game.difficultyId:room.difficulty,
     players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws&&p.ws.readyState===WebSocket.OPEN}))
   };
 }
@@ -165,12 +178,13 @@ function broadcast(room,payload) {
 function broadcastRoom(room) { broadcast(room,{type:"room_state",state:publicRoom(room)}); }
 function snapshot(room) {
   const g=room.game, territories={};
-  for (const [iso,t] of Object.entries(g.territories)) territories[iso]={owner:t.owner,army:Math.max(0,Math.floor(t.army))};
+  for (const [iso,t] of Object.entries(g.territories)) territories[iso]={owner:t.owner,army:Math.max(0,Math.floor(t.army)),protection:Math.max(0,t.protection||0)};
   return {
     revision:room.revision,
     phase:g.winner?"finished":"running",
     time:g.elapsed,
     winner:g.winner,
+    difficulty:g.difficultyId,
     eliminated_countries:[...g.eliminatedCountries],
     players:[...room.players.values()].map(p=>({id:p.id,name:p.name,country:p.country||"",connected:!!p.ws&&p.ws.readyState===WebSocket.OPEN})),
     ai_countries:g.aiCountries.slice(),
@@ -230,6 +244,8 @@ function addArmy(g,source,target,share,exact) {
   if (!g.territories[source]||!g.territories[target]||source===target) return false;
   const src=g.territories[source];
   if(src.owner==="NEUTRAL") return false;
+  const targetTerritory=g.territories[target];
+  if(targetTerritory.owner!==src.owner && targetTerritory.protection>0) return false;
   const free=Math.max(0,src.army-reservedFrom(g,source));
   const requested=exact==null?Math.floor(free*share):Math.min(Math.floor(exact),Math.floor(free));
   if (requested<1) return false;
@@ -250,7 +266,7 @@ function addArmy(g,source,target,share,exact) {
 function sendExact(g,source,target,amount) {
   const t=g.territories[source];
   if (!t) return;
-  const free=Math.max(0,t.army-reservedFrom(g,source)-AI_RESERVE);
+  const free=Math.max(0,t.army-reservedFrom(g,source)-Number(g.difficulty.ai_reserve));
   const count=Math.min(Math.floor(amount),Math.floor(free));
   if (count>0) addArmy(g,source,target,0,count);
 }
@@ -259,7 +275,7 @@ function projectedAt(g,owner,target) {
 }
 function aiDecide(g,owner) {
   const owned=PLAYABLE.filter(i=>g.territories[i].owner===owner);
-  const targets=PLAYABLE.filter(i=>g.territories[i].owner!==owner);
+  const targets=PLAYABLE.filter(i=>g.territories[i].owner!==owner && g.territories[i].protection<=0);
   if (!owned.length||!targets.length) return;
   let best="",bestScore=Infinity;
   for (const target of targets) {
@@ -269,7 +285,7 @@ function aiDecide(g,owner) {
       nearest=Math.min(nearest,Math.hypot(a.x-b.x,a.y-b.y));
     }
     const tt=g.territories[target];
-    const score=(tt.army+18)*(tt.owner==="NEUTRAL"?0.78:1)+nearest*0.075;
+    const score=(tt.army+18)*(tt.owner==="NEUTRAL"?Number(g.difficulty.neutral_factor):1)+nearest*Number(g.difficulty.distance_weight);
     if (score<bestScore) {bestScore=score;best=target;}
   }
   if (!best) return;
@@ -280,16 +296,17 @@ function aiDecide(g,owner) {
   }
   const targetArmy=g.territories[best].army;
   const projected=g.territories[rally].army+projectedAt(g,owner,rally);
-  const required=targetArmy*1.12+8;
-  if (projected>=required && g.territories[rally].army>targetArmy+8) {
-    const share=Math.max(0.52,Math.min(0.82,(targetArmy+Math.max(12,targetArmy*0.22))/g.territories[rally].army));
+  const required=targetArmy*Number(g.difficulty.required_multiplier)+Number(g.difficulty.required_bonus);
+  if (projected>=required && g.territories[rally].army>targetArmy+Number(g.difficulty.required_bonus)) {
+    const attackBonus=Math.max(Number(g.difficulty.attack_bonus_min),targetArmy*Number(g.difficulty.attack_bonus_ratio));
+    const share=Math.max(Number(g.difficulty.min_attack_share),Math.min(Number(g.difficulty.max_attack_share),(targetArmy+attackBonus)/g.territories[rally].army));
     addArmy(g,rally,best,share,null);
     return;
   }
   let need=Math.max(0,required-projected);
   const donors=owned
     .filter(x=>x!==rally)
-    .map(x=>({id:x,available:Math.max(0,g.territories[x].army-AI_RESERVE)}))
+    .map(x=>({id:x,available:Math.max(0,g.territories[x].army-Number(g.difficulty.ai_reserve))}))
     .filter(x=>x.available>4)
     .sort((a,b)=>b.available-a.available);
   for (const d of donors) {
@@ -380,8 +397,10 @@ function resolveArrivals(g) {
       }else if(t.army>0){
         t.army=Math.max(0,t.army-1);
       }else{
+        const wasNeutral=t.owner==="NEUTRAL";
         t.owner=a.owner;
         t.army=1;
+        if(wasNeutral) t.protection=NEUTRAL_PROTECTION_SECONDS;
       }
     }
   }
@@ -416,6 +435,7 @@ function tickRoom(room,dt) {
   g.elapsed+=dt;
   room.revision++;
   for (const t of Object.values(g.territories)) {
+    t.protection=Math.max(0,(t.protection||0)-dt);
     t.growth+=(t.owner==="NEUTRAL"?NEUTRAL_GROWTH:ACTIVE_GROWTH)*dt;
     const whole=Math.floor(t.growth);
     if (whole>0){t.army+=whole;t.growth-=whole;}
@@ -425,7 +445,7 @@ function tickRoom(room,dt) {
     g.aiTimers[owner]-=dt;
     if (g.aiTimers[owner]<=0){
       aiDecide(g,owner);
-      g.aiTimers[owner]=5+Math.random()*10;
+      g.aiTimers[owner]=aiDelay(g.difficulty);
     }
   }
   emitAndMove(g,dt);
@@ -473,7 +493,7 @@ wss.on("connection",ws=>{
       if (rooms.size>=maxRooms) return error(ws,"Сервер временно заполнен. Попробуйте позже.");
       const code=roomCode(),tok=token();
       player={id:randomId(),token:tok,name:String(msg.name||"Игрок").slice(0,24),country:"",ws};
-      room={code,hostToken:tok,started:false,players:new Map([[tok,player]]),game:null,createdAt:Date.now(),lastActivity:Date.now(),revision:0};
+      room={code,hostToken:tok,started:false,difficulty:DEFAULT_DIFFICULTY,players:new Map([[tok,player]]),game:null,createdAt:Date.now(),lastActivity:Date.now(),revision:0};
       rooms.set(code,room);
       ownedRoomCodes.add(code);
       send(ws,{type:"session",player_id:player.id,session_token:tok,code});
@@ -545,6 +565,15 @@ wss.on("connection",ws=>{
       return broadcastRoom(room);
     }
 
+    if (msg.type==="set_difficulty") {
+      if (room.started) return error(ws,"Партия уже началась.");
+      if (room.hostToken!==player.token) return error(ws,"Сложность выбирает создатель комнаты.");
+      const difficulty=String(msg.difficulty||"");
+      if (!DIFFICULTIES.has(difficulty)) return error(ws,"Неизвестная сложность.");
+      room.difficulty=difficulty;
+      return broadcastRoom(room);
+    }
+
     if (msg.type==="start_room") {
       if (room.started) return error(ws,"Партия уже началась.");
       if (room.hostToken!==player.token) return error(ws,"Запустить игру может только создатель комнаты.");
@@ -564,6 +593,8 @@ wss.on("connection",ws=>{
       if (!PLAYABLE.includes(from)||!PLAYABLE.includes(to)||from===to) return;
       const src=room.game.territories[from];
       if (!src||src.owner!==player.country) return error(ws,"Этой территорией управляет другая страна.");
+      const target=room.game.territories[to];
+      if (target.owner!==src.owner && target.protection>0) return error(ws,"Территория защищена после захвата.");
       const rawShare=Number(msg.share);
       const share=Number.isFinite(rawShare)?Math.max(0.01,Math.min(1,rawShare)):0.5;
       if(addArmy(room.game,from,to,share,null)) sendSnapshot(room);

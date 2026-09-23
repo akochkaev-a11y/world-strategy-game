@@ -10,7 +10,6 @@ const LON_MAX := 180.0
 const LAT_MIN := -60.0
 const LAT_MAX := 85.0
 const ARMY_SPEED := 110.0
-const AI_RESERVE := 30.0
 
 var ACTIVE_IDS: Array = []
 var BACKGROUND_IDS: Array = []
@@ -22,6 +21,10 @@ var OWNER_COLORS: Dictionary = {}
 var START_ARMY := 100.0
 var ACTIVE_GROWTH := 1.0
 var NEUTRAL_GROWTH := 0.5
+var NEUTRAL_PROTECTION_SECONDS := 60.0
+var AI_RESERVE := 30.0
+var ai_difficulty: Dictionary = {}
+var difficulty_id: String = "easy"
 
 var player_country := ""
 var territories:Dictionary={}
@@ -53,7 +56,7 @@ var multiplayer_result_shown:bool=false
 var local_player_eliminated:bool=false
 var elimination_notice:Control
 
-func setup(_data:Dictionary,selected:String)->void:
+func setup(_data:Dictionary,selected:String,selected_difficulty:String="easy")->void:
     var config := GameConfig.load_config()
     ACTIVE_IDS = GameConfig.active_ids(config)
     BACKGROUND_IDS = Array(config.get("background_countries", []))
@@ -65,6 +68,10 @@ func setup(_data:Dictionary,selected:String)->void:
     START_ARMY = float(config.get("start_army", 100.0))
     ACTIVE_GROWTH = float(config.get("active_growth_per_second", 1.0))
     NEUTRAL_GROWTH = float(config.get("neutral_growth_per_second", 0.5))
+    NEUTRAL_PROTECTION_SECONDS = float(config.get("neutral_capture_protection_seconds", 60.0))
+    difficulty_id = selected_difficulty
+    ai_difficulty = GameConfig.difficulty(config,difficulty_id)
+    AI_RESERVE = float(ai_difficulty.get("ai_reserve",30.0))
     player_country=selected;_load_geojson();_ensure_territories();_reset_ai_timers();game_started=territories.size()==PLAYABLE_IDS.size();queue_redraw()
 func _ready()->void:
     mouse_filter=Control.MOUSE_FILTER_STOP
@@ -87,7 +94,7 @@ func apply_multiplayer_state(state:Dictionary)->void:
         for iso_raw in remote_territories.keys():
             var iso:String=str(iso_raw)
             var raw:Dictionary=Dictionary(remote_territories[iso_raw])
-            territories[iso]={"owner":str(raw.get("owner","NEUTRAL")),"army":float(raw.get("army",0.0))}
+            territories[iso]={"owner":str(raw.get("owner","NEUTRAL")),"army":float(raw.get("army",0.0)),"protection":float(raw.get("protection",0.0))}
     armies.clear()
     var remote_armies:Array=Array(state.get("armies",[]))
     for raw_army in remote_armies:
@@ -157,7 +164,7 @@ func _ensure_territories()->void:
     for feature in map_features:
         var iso:String=_feature_iso(feature.get("properties",{}))
         if not PLAYABLE_IDS.has(iso) or territories.has(iso):continue
-        territories[iso]={"owner":iso if ACTIVE_IDS.has(iso) else "NEUTRAL","army":START_ARMY};growth_fraction[iso]=0.0
+        territories[iso]={"owner":iso if ACTIVE_IDS.has(iso) else "NEUTRAL","army":START_ARMY,"protection":0.0};growth_fraction[iso]=0.0
     if territories.size()!=PLAYABLE_IDS.size():push_error("Territory count mismatch, expected "+str(PLAYABLE_IDS.size())+", got "+str(territories.size()));territories.clear()
 func grow_armies()->void:
     if multiplayer_mode:return
@@ -169,16 +176,23 @@ func grow_armies()->void:
 func _reset_ai_timers()->void:
     ai_timers.clear()
     for owner in ACTIVE_IDS:
-        if str(owner)!=player_country:ai_timers[str(owner)]=randf_range(5.0,15.0)
+        if str(owner)!=player_country:ai_timers[str(owner)]=_next_ai_delay()
+func _next_ai_delay()->float:
+    return randf_range(float(ai_difficulty.get("ai_delay_min",5.0)),float(ai_difficulty.get("ai_delay_max",15.0)))
+func _update_protection(delta:float)->void:
+    for iso in territories.keys():
+        var t:Dictionary=territories[iso]
+        t["protection"]=maxf(0.0,float(t.get("protection",0.0))-delta)
 func _process(delta:float)->void:
     if game_over:return
     if multiplayer_mode:
         anim_time+=delta
+        _update_protection(delta)
         _advance_multiplayer_visuals(delta)
         _update_collision_flashes(delta)
         queue_redraw()
         return
-    var sim_delta:float=delta*time_scale;anim_time+=sim_delta;_move_armies(sim_delta);_update_ai(sim_delta);_update_collision_flashes(sim_delta);queue_redraw()
+    var sim_delta:float=delta*time_scale;anim_time+=sim_delta;_update_protection(sim_delta);_move_armies(sim_delta);_update_ai(sim_delta);_update_collision_flashes(sim_delta);queue_redraw()
 func _advance_multiplayer_visuals(delta:float)->void:
     for a in armies:
         var route_length:float=maxf(1.0,float(a.get("route_length",1.0)))
@@ -202,7 +216,7 @@ func _update_ai(delta:float)->void:
         if id==player_country or not ai_timers.has(id):continue
         ai_timers[id]=float(ai_timers[id])-delta
         if float(ai_timers[id])<=0.0:
-            _ai_decide(id);ai_timers[id]=randf_range(5.0,15.0)
+            _ai_decide(id);ai_timers[id]=_next_ai_delay()
 func _base_project(lon:float,lat:float)->Vector2:return Vector2((lon-LON_MIN)/(LON_MAX-LON_MIN)*size.x,(LAT_MAX-lat)/(LAT_MAX-LAT_MIN)*size.y)
 func _project(lon:float,lat:float)->Vector2:
     return _map_to_screen(_base_project(lon,lat))
@@ -284,6 +298,9 @@ func _draw_marker(iso:String,center:Vector2)->void:
     if show_name:
         var title:String=str(NAMES.get(iso,""));draw_string_outline(ThemeDB.fallback_font,c+Vector2(-w*0.5,10),title,HORIZONTAL_ALIGNMENT_CENTER,w,13,3,Color(0,0,0,0.96));draw_string(ThemeDB.fallback_font,c+Vector2(-w*0.5,10),title,HORIZONTAL_ALIGNMENT_CENTER,w,13,Color(0.94,0.97,1.0))
     var cy:float=30.0 if show_name else 19.0;draw_string_outline(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy),count,HORIZONTAL_ALIGNMENT_CENTER,w,18,4,Color(0,0,0,0.96));draw_string(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy),count,HORIZONTAL_ALIGNMENT_CENTER,w,18,Color.WHITE)
+    var protection:int=int(ceil(float(t.get("protection",0.0))))
+    if protection>0:
+        var protection_text:String="ЩИТ %02d" % protection;draw_string_outline(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy+17.0),protection_text,HORIZONTAL_ALIGNMENT_CENTER,w,12,3,Color(0,0,0,0.94));draw_string(ThemeDB.fallback_font,c+Vector2(-w*0.5,cy+17.0),protection_text,HORIZONTAL_ALIGNMENT_CENTER,w,12,Color(0.35,0.92,1.0))
 func _route_control(a:Vector2,b:Vector2,bend_scale:float=1.0)->Vector2:
     var d:Vector2=b-a
     if d.length_squared()<=0.0001:return (a+b)*0.5
@@ -372,6 +389,8 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
     if game_over or not PLAYABLE_IDS.has(from_iso) or not PLAYABLE_IDS.has(to_iso) or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso):return
     var src:Dictionary=territories[from_iso]
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
+    var target_territory:Dictionary=territories[to_iso]
+    if str(target_territory.owner)!=str(src.owner) and float(target_territory.get("protection",0.0))>0.0:return
     var amount:float=floor(float(src.army)*share)
     if amount<1.0 or not feature_centers.has(from_iso) or not feature_centers.has(to_iso):return
     var start:Vector2=Vector2(feature_centers[from_iso]);var finish:Vector2=Vector2(feature_centers[to_iso]);var canonical_length:float=_route_length(start,finish,zoom)/maxf(zoom,0.001)
@@ -413,7 +432,9 @@ func _arrive(index:int)->void:
     var t:Dictionary=territories[target]
     if str(t.owner)==str(a.owner):t.army=float(t.army)+float(a.amount);return
     var attackers:float=float(a.amount);var defenders:float=float(t.army)
-    if attackers>defenders:t.owner=str(a.owner);t.army=attackers-defenders
+    if attackers>defenders:
+        var was_neutral:bool=str(t.owner)=="NEUTRAL";t.owner=str(a.owner);t.army=attackers-defenders
+        if was_neutral:t["protection"]=NEUTRAL_PROTECTION_SECONDS
     else:t.army=defenders-attackers
     _check_end_state()
 func _check_end_state()->void:
@@ -447,7 +468,7 @@ func _ai_decide(owner:String)->void:
     for iso in territories.keys():
         var id:String=str(iso);var t:Dictionary=territories[iso]
         if str(t.owner)==owner:owned.append(id)
-        else:targets.append(id)
+        elif float(t.get("protection",0.0))<=0.0:targets.append(id)
     if owned.is_empty() or targets.is_empty():return
     var best_target:String="";var best_score:float=INF
     for target_id in targets:
@@ -455,7 +476,7 @@ func _ai_decide(owner:String)->void:
         var target:Dictionary=territories[target_id];var nearest:float=INF
         for source_id in owned:
             if feature_centers.has(source_id):nearest=minf(nearest,Vector2(feature_centers[source_id]).distance_to(Vector2(feature_centers[target_id])))
-        var neutral_factor:float=0.78 if str(target.owner)=="NEUTRAL" else 1.0;var score:float=(float(target.army)+18.0)*neutral_factor+nearest*0.075
+        var neutral_factor:float=float(ai_difficulty.get("neutral_factor",0.78)) if str(target.owner)=="NEUTRAL" else 1.0;var score:float=(float(target.army)+18.0)*neutral_factor+nearest*float(ai_difficulty.get("distance_weight",0.075))
         if score<best_score:best_score=score;best_target=str(target_id)
     if best_target=="":return
     var rally:String="";var rally_dist:float=INF
@@ -464,9 +485,9 @@ func _ai_decide(owner:String)->void:
         var d:float=Vector2(feature_centers[source_id]).distance_to(Vector2(feature_centers[best_target]))
         if d<rally_dist:rally_dist=d;rally=str(source_id)
     if rally=="":return
-    var target_army:float=float(territories[best_target].army);var projected:float=float(territories[rally].army)+_projected_at(owner,rally);var required:float=target_army*1.12+8.0
-    if projected>=required and float(territories[rally].army)>target_army+8.0:
-        var attack_share:float=clampf((target_army+maxf(12.0,target_army*0.22))/float(territories[rally].army),0.52,0.82);_send_army(rally,best_target,attack_share,true);return
+    var target_army:float=float(territories[best_target].army);var projected:float=float(territories[rally].army)+_projected_at(owner,rally);var required_bonus:float=float(ai_difficulty.get("required_bonus",8.0));var required:float=target_army*float(ai_difficulty.get("required_multiplier",1.12))+required_bonus
+    if projected>=required and float(territories[rally].army)>target_army+required_bonus:
+        var attack_bonus:float=maxf(float(ai_difficulty.get("attack_bonus_min",12.0)),target_army*float(ai_difficulty.get("attack_bonus_ratio",0.22)));var attack_share:float=clampf((target_army+attack_bonus)/float(territories[rally].army),float(ai_difficulty.get("min_attack_share",0.52)),float(ai_difficulty.get("max_attack_share",0.82)));_send_army(rally,best_target,attack_share,true);return
     var need:float=maxf(0.0,required-projected);var donors:Array=[]
     for source_id in owned:
         if str(source_id)==rally:continue

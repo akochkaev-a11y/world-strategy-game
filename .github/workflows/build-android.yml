@@ -82,6 +82,25 @@ jobs:
           max_players = int(config.get('max_players', 0))
           if max_players < 1 or max_players > len(active):
               raise SystemExit('max_players must be between 1 and the active-country count')
+          difficulties = config.get('difficulties', [])
+          difficulty_ids = [entry.get('id') for entry in difficulties]
+          if difficulty_ids != ['easy', 'medium', 'hard']:
+              raise SystemExit(f'Expected easy/medium/hard difficulties, got {difficulty_ids}')
+          if config.get('default_difficulty') not in difficulty_ids:
+              raise SystemExit('default_difficulty must reference a configured difficulty')
+          if int(config.get('neutral_capture_protection_seconds', 0)) != 60:
+              raise SystemExit('Neutral capture protection must be 60 seconds')
+          for entry in difficulties:
+              delay_min = float(entry.get('ai_delay_min', 0))
+              delay_max = float(entry.get('ai_delay_max', 0))
+              share_min = float(entry.get('min_attack_share', 0))
+              share_max = float(entry.get('max_attack_share', 0))
+              if delay_min <= 0 or delay_max < delay_min:
+                  raise SystemExit(f'Invalid AI delays for {entry.get("id")}')
+              if not 0 < share_min <= share_max <= 1:
+                  raise SystemExit(f'Invalid attack shares for {entry.get("id")}')
+              if int(entry.get('ai_reserve', -1)) < 0:
+                  raise SystemExit(f'Invalid AI reserve for {entry.get("id")}')
           a3 = {"FRA":"FR","RUS":"RU","UKR":"UA","POL":"PL","DEU":"DE","GBR":"GB","PRT":"PT","CHN":"CN","IND":"IN","IRN":"IR","JPN":"JP","KAZ":"KZ","SAU":"SA","IDN":"ID","MNG":"MN","PAK":"PK","TUR":"TR","MMR":"MM","AFG":"AF","YEM":"YE","THA":"TH","ESP":"ES","TKM":"TM","SWE":"SE","UZB":"UZ","IRQ":"IQ","NOR":"NO","FIN":"FI","VNM":"VN","MYS":"MY","OMN":"OM"}
           data = json.loads(path.read_text())
           found = []

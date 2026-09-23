@@ -101,6 +101,8 @@ func _send_army(from_iso:String,to_iso:String,share:=0.5,ai:=false)->void:
     if game_over or not PLAYABLE_IDS.has(from_iso) or not PLAYABLE_IDS.has(to_iso) or from_iso==to_iso or not territories.has(from_iso) or not territories.has(to_iso):return
     var src:Dictionary=territories[from_iso]
     if str(src.owner)=="NEUTRAL" or (not ai and str(src.owner)!=player_country):return
+    var target_territory:Dictionary=territories[to_iso]
+    if str(target_territory.owner)!=str(src.owner) and float(target_territory.get("protection",0.0))>0.0:return
     var free:float=maxf(0.0,float(src.army)-_reserved_from(from_iso))
     var requested:float=floor(free*share)
     if requested<1.0 or not feature_centers.has(from_iso) or not feature_centers.has(to_iso):return
@@ -168,7 +170,8 @@ func _resolve_arrival_stream(index:int)->void:
         t.army=maxf(0.0,float(t.army)-1.0)
         collision_flashes.append({"map_pos":_screen_to_map(_stream_point(a,1.0)),"life":0.18})
     else:
-        t.owner=owner;t.army=1.0
+        var was_neutral:bool=str(t.owner)=="NEUTRAL";t.owner=owner;t.army=1.0
+        if was_neutral:t["protection"]=NEUTRAL_PROTECTION_SECONDS
     if float(a.amount)<=0.0 and float(a.get("pending",0.0))<=0.0:armies.remove_at(index)
     _check_end_state()
 

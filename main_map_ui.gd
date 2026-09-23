@@ -7,6 +7,9 @@ var active_order: Array = []
 var active_countries: Dictionary = {}
 var country_flags: Dictionary = {}
 var default_server_url: String = ""
+var difficulty_ids: Array = []
+var difficulty_names: Dictionary = {}
+var selected_difficulty: String = "easy"
 
 var world_map: Control
 var military_balance: Control
@@ -36,6 +39,9 @@ func _ready() -> void:
     active_countries = GameConfig.country_names(game_config)
     country_flags = GameConfig.country_flags(game_config)
     default_server_url = str(game_config.get("default_server_url", ""))
+    difficulty_ids = GameConfig.difficulty_ids(game_config)
+    difficulty_names = GameConfig.difficulty_names(game_config)
+    selected_difficulty = str(game_config.get("default_difficulty", "easy"))
     _show_mode_chooser()
 
 func _clear_frontend() -> void:
@@ -103,6 +109,22 @@ func _show_country_chooser() -> void:
     subtitle.modulate = Color(0.72,0.80,0.88)
     subtitle.add_theme_font_size_override("font_size",17)
     box.add_child(subtitle)
+    var difficulty_row := HBoxContainer.new()
+    difficulty_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    difficulty_row.add_theme_constant_override("separation",12)
+    box.add_child(difficulty_row)
+    var difficulty_label := Label.new()
+    difficulty_label.text = "СЛОЖНОСТЬ ИИ"
+    difficulty_label.add_theme_font_size_override("font_size",17)
+    difficulty_row.add_child(difficulty_label)
+    var difficulty_selector := OptionButton.new()
+    difficulty_selector.custom_minimum_size = Vector2(230,48)
+    for difficulty_id_raw in difficulty_ids:
+        var difficulty_id: String = str(difficulty_id_raw)
+        difficulty_selector.add_item(str(difficulty_names.get(difficulty_id,difficulty_id)))
+    difficulty_selector.select(maxi(0,difficulty_ids.find(selected_difficulty)))
+    difficulty_selector.item_selected.connect(_select_solo_difficulty)
+    difficulty_row.add_child(difficulty_selector)
     var grid := GridContainer.new()
     grid.columns = 5
     grid.add_theme_constant_override("h_separation",12)
@@ -111,7 +133,7 @@ func _show_country_chooser() -> void:
     for iso in active_order:
         var b := Button.new()
         b.text = "%s\n%s" % [str(country_flags.get(iso,"")),str(active_countries.get(iso,iso))]
-        b.custom_minimum_size = Vector2(138,145)
+        b.custom_minimum_size = Vector2(138,105)
         b.add_theme_font_size_override("font_size",19)
         b.pressed.connect(_start_game.bind(str(iso)))
         grid.add_child(b)
@@ -212,6 +234,7 @@ func _on_multiplayer_status(text: String) -> void:
 
 func _on_room_state_changed(state: Dictionary) -> void:
     room_state = state.duplicate(true)
+    selected_difficulty = str(room_state.get("difficulty",selected_difficulty))
     selected_country = ""
     var players:Array = room_state.get("players",[])
     for p_raw in players:
@@ -233,7 +256,7 @@ func _show_lobby() -> void:
     center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     lobby_panel.add_child(center)
     var box := VBoxContainer.new()
-    box.custom_minimum_size = Vector2(900,620)
+    box.custom_minimum_size = Vector2(900,690)
     box.alignment = BoxContainer.ALIGNMENT_CENTER
     box.add_theme_constant_override("separation",12)
     center.add_child(box)
@@ -247,6 +270,24 @@ func _show_lobby() -> void:
     subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     subtitle.modulate = Color(0.68,0.76,0.84)
     box.add_child(subtitle)
+    var me_id: String = str(multiplayer_client.player_id)
+    var host_id: String = str(room_state.get("host_id",""))
+    var difficulty_row := HBoxContainer.new()
+    difficulty_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    difficulty_row.add_theme_constant_override("separation",12)
+    box.add_child(difficulty_row)
+    var difficulty_label := Label.new()
+    difficulty_label.text = "СЛОЖНОСТЬ БОТОВ"
+    difficulty_row.add_child(difficulty_label)
+    var difficulty_selector := OptionButton.new()
+    difficulty_selector.custom_minimum_size = Vector2(230,46)
+    for difficulty_id_raw in difficulty_ids:
+        var difficulty_id: String = str(difficulty_id_raw)
+        difficulty_selector.add_item(str(difficulty_names.get(difficulty_id,difficulty_id)))
+    difficulty_selector.select(maxi(0,difficulty_ids.find(selected_difficulty)))
+    difficulty_selector.disabled = me_id != host_id
+    difficulty_selector.item_selected.connect(_select_multiplayer_difficulty)
+    difficulty_row.add_child(difficulty_selector)
     var taken: Dictionary = {}
     var players: Array = room_state.get("players",[])
     for p_raw in players:
@@ -264,7 +305,7 @@ func _show_lobby() -> void:
     for iso_raw in active_order:
         var iso: String = str(iso_raw)
         var b := Button.new()
-        b.custom_minimum_size = Vector2(165,112)
+        b.custom_minimum_size = Vector2(165,90)
         var holder: String = str(taken.get(iso,""))
         if holder == "":
             b.text = "%s\n%s\nСвободно" % [str(country_flags.get(iso,"")),str(active_countries.get(iso,iso))]
@@ -274,8 +315,6 @@ func _show_lobby() -> void:
                 b.disabled = true
         b.pressed.connect(_select_multiplayer_country.bind(iso))
         grid.add_child(b)
-    var me_id: String = str(multiplayer_client.player_id)
-    var host_id: String = str(room_state.get("host_id",""))
     start_button = Button.new()
     start_button.text = "СТАРТ"
     start_button.custom_minimum_size = Vector2(420,58)
@@ -296,11 +335,21 @@ func _select_multiplayer_country(iso: String) -> void:
     selected_country = iso
     multiplayer_client.select_country(iso)
 
+func _select_solo_difficulty(index: int) -> void:
+    if index >= 0 and index < difficulty_ids.size():
+        selected_difficulty = str(difficulty_ids[index])
+
+func _select_multiplayer_difficulty(index: int) -> void:
+    if index >= 0 and index < difficulty_ids.size():
+        selected_difficulty = str(difficulty_ids[index])
+        multiplayer_client.set_difficulty(selected_difficulty)
+
 func _start_multiplayer_room() -> void:
     multiplayer_client.start_room()
 
 func _on_multiplayer_game_started(state: Dictionary) -> void:
     room_state = state.duplicate(true)
+    selected_difficulty = str(room_state.get("difficulty",selected_difficulty))
     var players: Array = room_state.get("players",[])
     var server_country:String=str(room_state.get("local_country",""))
     if server_country!="":
@@ -324,7 +373,7 @@ func _start_game(selected: String, multiplayer: bool = false) -> void:
     world_map = preload("res://optimized_world_map.gd").new()
     add_child(world_map)
     world_map.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    world_map.setup(active_countries,selected)
+    world_map.setup(active_countries,selected,selected_difficulty)
     multiplayer_game = multiplayer
     if multiplayer_game:
         world_map.set_multiplayer_mode(true)

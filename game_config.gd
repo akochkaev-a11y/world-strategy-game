@@ -52,3 +52,27 @@ static func playable_ids(config: Dictionary) -> Array:
 
 static func map_ids(config: Dictionary) -> Array:
     return playable_ids(config) + Array(config.get("background_countries", []))
+
+static func difficulty_ids(config: Dictionary) -> Array:
+    var result: Array = []
+    for raw in config.get("difficulties", []):
+        if typeof(raw) == TYPE_DICTIONARY:
+            result.append(str(raw.get("id", "")))
+    return result
+
+static func difficulty_names(config: Dictionary) -> Dictionary:
+    var result := {}
+    for raw in config.get("difficulties", []):
+        if typeof(raw) == TYPE_DICTIONARY:
+            result[str(raw.get("id", ""))] = str(raw.get("name", ""))
+    return result
+
+static func difficulty(config: Dictionary, difficulty_id: String) -> Dictionary:
+    for raw in config.get("difficulties", []):
+        if typeof(raw) == TYPE_DICTIONARY and str(raw.get("id", "")) == difficulty_id:
+            return Dictionary(raw)
+    var fallback := str(config.get("default_difficulty", "easy"))
+    for raw in config.get("difficulties", []):
+        if typeof(raw) == TYPE_DICTIONARY and str(raw.get("id", "")) == fallback:
+            return Dictionary(raw)
+    return {}

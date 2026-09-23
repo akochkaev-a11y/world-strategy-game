@@ -62,6 +62,9 @@ func join_room(url: String, code: String, name_value: String) -> void:
 func select_country(iso: String) -> void:
     _send({"type":"select_country","country":iso})
 
+func set_difficulty(difficulty_id: String) -> void:
+    _send({"type":"set_difficulty","difficulty":difficulty_id})
+
 func start_room() -> void:
     _send({"type":"start_room"})
 

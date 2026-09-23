@@ -29,7 +29,7 @@ function fakeRoom(humanCountries=["RU"]) {
     country,
     ws:null
   }));
-  const room={code:"123456",hostToken:"token-0",started:true,players,game:null,revision:0};
+  const room={code:"123456",hostToken:"token-0",started:true,difficulty:"easy",players,game:null,revision:0};
   room.game=makeGame(room);
   return room;
 }
@@ -70,6 +70,10 @@ test("shared game configuration has unique and complete country groups",()=>{
   assert.equal(BACKGROUND.length,7);
   assert.equal(PLAYABLE.length,55);
   assert.equal(new Set([...PLAYABLE,...BACKGROUND]).size,62);
+  assert.deepEqual(GAME_CONFIG.difficulties.map(value=>value.id),["easy","medium","hard"]);
+  assert.ok(GAME_CONFIG.difficulties[0].ai_delay_min>GAME_CONFIG.difficulties[1].ai_delay_min);
+  assert.ok(GAME_CONFIG.difficulties[1].ai_delay_min>GAME_CONFIG.difficulties[2].ai_delay_min);
+  assert.equal(GAME_CONFIG.neutral_capture_protection_seconds,60);
 });
 
 test("authoritative game owns growth, AI assignments, movement, collisions and capture",()=>{
@@ -115,6 +119,20 @@ test("authoritative game owns growth, AI assignments, movement, collisions and c
   assert.equal(game.territories.UA.owner,"RU");
   assert.equal(game.territories.UA.army,1);
 
+  game.territories.KZ.army=0;
+  const neutralCapture=addArmy(game,"RU","KZ",0,1);
+  neutralCapture.pending=0;
+  neutralCapture.units=[1];
+  resolveArrivals(game);
+  assert.equal(game.territories.KZ.owner,"RU");
+  assert.equal(game.territories.KZ.protection,60);
+  assert.equal(addArmy(game,"DE","KZ",0,1),false);
+  tickRoom(room,30);
+  assert.equal(game.territories.KZ.protection,30);
+  tickRoom(room,30);
+  assert.equal(game.territories.KZ.protection,0);
+  assert.ok(addArmy(game,"DE","KZ",0,1));
+
   const eliminated=[];
   game.onCountryEliminated=country=>eliminated.push(country);
   for(const territory of Object.values(game.territories)) {
@@ -148,6 +166,11 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   command(second.ws,{type:"join_room",code:firstSession.code,name:"Guest"});
   const secondSession=await second.box.take(message=>message.type==="session");
   assert.ok(secondSession.session_token);
+  command(second.ws,{type:"set_difficulty",difficulty:"hard"});
+  const forbiddenDifficulty=await second.box.take(message=>message.type==="error");
+  assert.match(forbiddenDifficulty.message,/создатель/);
+  command(first.ws,{type:"set_difficulty",difficulty:"medium"});
+  await first.box.take(message=>message.type==="room_state"&&message.state.difficulty==="medium");
   command(second.ws,{type:"select_country",country:"DE"});
   await second.box.take(message=>message.type==="room_state"&&message.state.players.some(p=>p.country==="DE"));
 
@@ -158,6 +181,7 @@ test("room protocol starts one game, broadcasts armies, rejects strangers and re
   assert.equal(initial.state.players.length,2);
   assert.equal(initial.state.ai_countries.includes("RU"),false);
   assert.equal(initial.state.ai_countries.includes("DE"),false);
+  assert.equal(initial.state.difficulty,"medium");
 
   command(second.ws,{type:"send_army",source:"RU",target:"KZ",share:0.5});
   const forbidden=await second.box.take(message=>message.type==="error");

@@ -5,6 +5,13 @@
   "start_army": 100,
   "active_growth_per_second": 1.0,
   "neutral_growth_per_second": 0.5,
+  "neutral_capture_protection_seconds": 60,
+  "default_difficulty": "easy",
+  "difficulties": [
+    {"id":"easy","name":"ЛЁГКИЙ","ai_delay_min":5.0,"ai_delay_max":15.0,"ai_reserve":30,"required_multiplier":1.12,"required_bonus":8,"min_attack_share":0.52,"max_attack_share":0.82,"attack_bonus_min":12,"attack_bonus_ratio":0.22,"neutral_factor":0.78,"distance_weight":0.075},
+    {"id":"medium","name":"СРЕДНИЙ","ai_delay_min":3.0,"ai_delay_max":9.0,"ai_reserve":24,"required_multiplier":1.08,"required_bonus":6,"min_attack_share":0.56,"max_attack_share":0.86,"attack_bonus_min":10,"attack_bonus_ratio":0.20,"neutral_factor":0.75,"distance_weight":0.065},
+    {"id":"hard","name":"СЛОЖНЫЙ","ai_delay_min":1.5,"ai_delay_max":5.0,"ai_reserve":18,"required_multiplier":1.03,"required_bonus":4,"min_attack_share":0.60,"max_attack_share":0.92,"attack_bonus_min":8,"attack_bonus_ratio":0.18,"neutral_factor":0.72,"distance_weight":0.055}
+  ],
   "active_countries": [
     {"iso":"RU","name":"Россия","flag":"🇷🇺","color":[0.10,0.42,0.96]},
     {"iso":"UA","name":"Украина","flag":"🇺🇦","color":[0.98,0.72,0.08]},
